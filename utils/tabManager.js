@@ -3,7 +3,7 @@
  * Core logic for grouping, cleanup, and tab operations.
  */
 
-import { getSettings, getTabActivity, getCustomRules, tabMatchesRule, markProgrammaticTabs, isTabManuallyGrouped } from './storage.js';
+import { getSettings, getTabActivity, markProgrammaticTabs, isTabManuallyGrouped, incrementStat, getHeuristicCache, setHeuristicCache } from './storage.js';
 
 /** Chrome tab group colors */
 export const GROUP_COLORS = [
@@ -313,6 +313,8 @@ export const BUILTIN_CATEGORIES = [
       // ── Deployment & hosting ─────────────────────────────────────────────
       'vercel.app', 'netlify.app', 'railway.app', 'render.com',
       'fly.io', 'heroku.com',
+      // ── Domains & infrastructure ─────────────────────────────────────────
+      'godaddy.com', 'namecheap.com', 'cloudflare.com', 'hostinger.com',
       // ── Cloud consoles ────────────────────────────────────────────────────
       'console.aws.amazon.com', 'cloud.google.com', 'portal.azure.com',
       'console.firebase.google.com', 'console.cloud.google.com', 'catalyst.zoho.com',
@@ -460,7 +462,7 @@ export const BUILTIN_CATEGORIES = [
  * Returns the first matching BUILTIN_CATEGORY for a tab, or null.
  * Checks tab URL (full) and hostname against category patterns.
  */
-function tabMatchesCategory(tab, category) {
+export function tabMatchesCategory(tab, category) {
   const rawUrl   = tab.url || '';
   const url      = rawUrl.toLowerCase();
   const hostname = (() => { try { return new URL(rawUrl).hostname.toLowerCase(); } catch { return ''; } })();
@@ -498,13 +500,40 @@ function tabMatchesCategory(tab, category) {
 
 
 /**
+ * Heuristic Keyword Dictionary
+ * Maps category IDs to a list of keywords to look for in the page title/description.
+ */
+const HEURISTIC_DICTIONARY = {
+  shopping: ['shop', 'store', 'cart', 'buy', 'clothing', 'fashion', 'marketplace', 'checkout'],
+  finance: ['bank', 'finance', 'invest', 'portfolio', 'crypto', 'wallet', 'tax', 'trading', 'loan', 'credit'],
+  work: ['docs', 'spreadsheet', 'presentation', 'jira', 'confluence', 'workspace', 'slack', 'notion', 'trello', 'asana', 'invoice'],
+  social: ['social', 'connect', 'community', 'forum', 'chat', 'message', 'network', 'friends', 'meet'],
+  news: ['news', 'breaking', 'article', 'journal', 'post', 'blog', 'daily', 'times', 'report', 'headlines'],
+  entertainment: ['video', 'watch', 'movie', 'stream', 'music', 'listen', 'podcast', 'game', 'play', 'show', 'entertainment'],
+  dev: ['code', 'developer', 'api', 'hosting', 'domain', 'server', 'database', 'cloud', 'deployment', 'git', 'repository', 'docs'],
+  ai: ['ai', 'artificial intelligence', 'chat', 'llm', 'generate', 'prompt', 'model'],
+  learning: ['course', 'learn', 'tutorial', 'class', 'education', 'study', 'university', 'academy', 'degree'],
+  food: ['food', 'delivery', 'restaurant', 'menu', 'order', 'eat', 'recipe', 'dining'],
+  travel: ['travel', 'flight', 'hotel', 'book', 'trip', 'vacation', 'airline', 'booking', 'accommodation'],
+  government: ['government', 'official', 'portal', 'tax', 'citizen', 'public services', 'department']
+};
+
+/**
+ * Scrapes metadata from the actual tab DOM.
+ * Must be executed in the context of the page.
+ */
+function scrapeTabMetadata() {
+  const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+  const metaKeywords = document.querySelector('meta[name="keywords"]')?.content || '';
+  return { title: document.title, description: metaDesc, keywords: metaKeywords };
+}
+
+/**
  * Auto-group all tabs in the current window by domain.
  */
 export async function autoGroupByDomain(windowId, forceReGroupAll = false) {
   const settings = await getSettings();
   const excluded = new Set(settings.excludedDomains || []);
-  const customRules = await getCustomRules();
-  const activeRules = customRules.filter((r) => r.enabled !== false);
 
   // Safety: if windowId is missing, resolve it from the focused window
   if (!windowId) {
@@ -533,89 +562,141 @@ export async function autoGroupByDomain(windowId, forceReGroupAll = false) {
   const existingGroups = await chrome.tabGroups.query({ windowId });
   const results = [];
 
-  // ── Step 1: Custom rules first (match any number of tabs, even 1) ─────────
-  const ruleTabMap = {}; // { ruleId: { rule, tabIds[] } }
-  const customMatchedTabIds = new Set();
-
-  for (const rule of activeRules) {
-    for (const tab of tabs) {
-      if (customMatchedTabIds.has(tab.id)) continue; // first matching rule wins
-      if (tabMatchesRule(tab, rule)) {
-        if (!ruleTabMap[rule.id]) ruleTabMap[rule.id] = { rule, tabIds: [] };
-        ruleTabMap[rule.id].tabIds.push(tab.id);
-        customMatchedTabIds.add(tab.id);
-      }
-    }
-  }
-
-  for (const { rule, tabIds } of Object.values(ruleTabMap)) {
-    if (tabIds.length === 0) continue;
-    try {
-      const title = rule.name || 'Custom';
-      const color = rule.color || 'blue';
-      const existing = existingGroups.find((g) => g.title === title);
-      if (existing) {
-        await markProgrammaticTabs(tabIds);
-        await chrome.tabs.group({ tabIds, groupId: existing.id });
-        results.push({ groupId: existing.id, title, color, count: tabIds.length, source: 'rule' });
-      } else {
-        await markProgrammaticTabs(tabIds);
-        const groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
-        await chrome.tabGroups.update(groupId, { color, title });
-        existingGroups.push({ id: groupId, title, color });
-        results.push({ groupId, title, color, count: tabIds.length, source: 'rule' });
-      }
-    } catch (e) {
-      console.warn('[TabMaster] Could not group tabs for rule', rule.name, e);
-    }
-  }
-
-  // ── Step 1.5: Category-based grouping (always runs) ───────────────
-  // Each tab is matched against BUILTIN_CATEGORIES + customCategories (first match wins).
+  // ── Step 1: Category-based grouping (always runs) ───────────────
+  // Each tab is matched against unified category list based on categoryOrder (first match wins).
   const categoryMatchedTabIds = new Set();
 
   {
     const overrides = settings.categoryOverrides || {};
     const catTabMap = {}; // catId → { label, emoji, color, tabIds[] }
 
-    for (const cat of BUILTIN_CATEGORIES) {
-      const ov = overrides[cat.id] || {};
-      if (ov.enabled === false) continue; // user disabled this category
+    const builtInMap = Object.fromEntries(BUILTIN_CATEGORIES.map(c => [c.id, c]));
+    const customMap = Object.fromEntries((settings.customCategories || []).map(c => [c.id, c]));
+    const order = settings.categoryOrder || [];
 
-      const color = ov.color || cat.color;
-      const name  = ov.name  || cat.name;
-      // Merge built-in patterns with any user-added extra patterns
-      const effectiveCat = {
-        ...cat,
-        patterns: [...cat.patterns, ...(ov.extraPatterns || [])],
-      };
+    // Ensure any newly added categories are evaluated even if not in order array
+    const allCatIds = new Set([...Object.keys(builtInMap), ...Object.keys(customMap)]);
+    const evaluateOrder = [...order];
+    for (const id of allCatIds) {
+      if (!evaluateOrder.includes(id)) evaluateOrder.push(id);
+    }
+
+    for (const catId of evaluateOrder) {
+      const isCustom = customMap.hasOwnProperty(catId);
+      const isBuiltIn = builtInMap.hasOwnProperty(catId);
+      if (!isCustom && !isBuiltIn) continue;
+
+      let label, color, effectiveCat;
+
+      if (isCustom) {
+        const cat = customMap[catId];
+        if (cat.enabled === false) continue;
+        if (!cat.patterns?.length) continue;
+        color = cat.color || 'blue';
+        label = `${cat.emoji || '📁'} ${cat.name || 'Custom'}`;
+        effectiveCat = cat;
+      } else {
+        const cat = builtInMap[catId];
+        const ov = overrides[cat.id] || {};
+        if (ov.enabled === false) continue;
+
+        color = ov.color || cat.color;
+        const name  = ov.name  || cat.name;
+        label = `${cat.emoji} ${name}`;
+        effectiveCat = {
+          ...cat,
+          patterns: [...cat.patterns, ...(ov.extraPatterns || [])],
+        };
+      }
 
       for (const tab of tabs) {
-        if (customMatchedTabIds.has(tab.id)) continue;  // skip rule-matched tabs
-        if (categoryMatchedTabIds.has(tab.id)) continue; // first category wins
+        if (categoryMatchedTabIds.has(tab.id)) continue;
+        if (categoryMatchedTabIds.has(tab.id)) continue;
         if (tabMatchesCategory(tab, effectiveCat)) {
-          if (!catTabMap[cat.id]) catTabMap[cat.id] = { label: `${cat.emoji} ${name}`, color, tabIds: [] };
-          catTabMap[cat.id].tabIds.push(tab.id);
+          if (!catTabMap[catId]) catTabMap[catId] = { label, color, tabIds: [] };
+          catTabMap[catId].tabIds.push(tab.id);
           categoryMatchedTabIds.add(tab.id);
         }
       }
     }
 
-    // ── Custom (user-defined) categories ─────────────────────────────────────
-    // Processed after built-ins so built-in matches always take priority.
-    for (const cat of (settings.customCategories || [])) {
-      if (!cat.patterns?.length) continue; // skip empty/invalid entries
-      const color = cat.color || 'blue';
-      const label = `${cat.emoji || '📁'} ${cat.name || 'Custom'}`;
+    // ── Heuristic Fallback for Unmatched Tabs ──
+    const unmatchedTabs = tabs.filter(t => !categoryMatchedTabIds.has(t.id));
+    if (unmatchedTabs.length > 0) {
+      const hCache = await getHeuristicCache();
+      let cacheUpdated = false;
 
-      for (const tab of tabs) {
-        if (customMatchedTabIds.has(tab.id)) continue;
-        if (categoryMatchedTabIds.has(tab.id)) continue;
-        if (tabMatchesCategory(tab, cat)) {
-          if (!catTabMap[cat.id]) catTabMap[cat.id] = { label, color, tabIds: [] };
-          catTabMap[cat.id].tabIds.push(tab.id);
-          categoryMatchedTabIds.add(tab.id);
+      const getCatDetails = (id) => {
+        const c = customMap[id] || builtInMap[id];
+        if (!c) return null;
+        let color = c.color || 'blue';
+        let name = c.name || 'Custom';
+        if (builtInMap[id]) {
+          const ov = overrides[id] || {};
+          color = ov.color || color;
+          name = ov.name || name;
         }
+        return { label: `${c.emoji || '📁'} ${name}`, color };
+      };
+
+      await Promise.all(unmatchedTabs.map(async (tab) => {
+        const domain = getDomain(tab.url);
+        if (!domain || excluded.has(domain)) return;
+
+        let matchedCatId = hCache[domain];
+
+        if (!matchedCatId && tab.url && tab.url.startsWith('http')) {
+          try {
+            const results = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: scrapeTabMetadata
+            });
+            
+            if (results && results[0] && results[0].result) {
+              const { title, description, keywords } = results[0].result;
+              const text = `${title} ${description} ${keywords}`.toLowerCase();
+              
+              for (const [catId, kws] of Object.entries(HEURISTIC_DICTIONARY)) {
+                if (kws.some(kw => text.includes(kw))) {
+                  if (customMap[catId] || builtInMap[catId]) {
+                    matchedCatId = catId;
+                    break;
+                  }
+                }
+              }
+              hCache[domain] = matchedCatId || 'unmatched';
+              cacheUpdated = true;
+            }
+          } catch (e) {
+            // Cannot execute script on discarded or restricted pages, fallback to just tab title
+            if (tab.title) {
+              const text = tab.title.toLowerCase();
+              for (const [catId, kws] of Object.entries(HEURISTIC_DICTIONARY)) {
+                if (kws.some(kw => text.includes(kw))) {
+                  if (customMap[catId] || builtInMap[catId]) {
+                    matchedCatId = catId;
+                    break;
+                  }
+                }
+              }
+              hCache[domain] = matchedCatId || 'unmatched';
+              cacheUpdated = true;
+            }
+          }
+        }
+
+        if (matchedCatId && matchedCatId !== 'unmatched') {
+          const details = getCatDetails(matchedCatId);
+          if (details) {
+            if (!catTabMap[matchedCatId]) catTabMap[matchedCatId] = { label: details.label, color: details.color, tabIds: [] };
+            catTabMap[matchedCatId].tabIds.push(tab.id);
+            categoryMatchedTabIds.add(tab.id);
+          }
+        }
+      }));
+
+      if (cacheUpdated) {
+        await chrome.storage.local.set({ heuristicCache: hCache });
       }
     }
 
@@ -624,15 +705,16 @@ export async function autoGroupByDomain(windowId, forceReGroupAll = false) {
       try {
         const existing = existingGroups.find((g) => g.title === label);
         if (existing) {
+          const newCount = tabIds.filter(id => allTabs.find(t => t.id === id)?.groupId !== existing.id).length;
           await markProgrammaticTabs(tabIds);
           await chrome.tabs.group({ tabIds, groupId: existing.id });
-          results.push({ groupId: existing.id, title: label, color, count: tabIds.length, source: 'category' });
+          results.push({ groupId: existing.id, title: label, color, count: tabIds.length, newlyGroupedCount: newCount, source: 'category' });
         } else {
           await markProgrammaticTabs(tabIds);
           const groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
           await chrome.tabGroups.update(groupId, { color, title: label });
           existingGroups.push({ id: groupId, title: label, color });
-          results.push({ groupId, title: label, color, count: tabIds.length, source: 'category' });
+          results.push({ groupId, title: label, color, count: tabIds.length, newlyGroupedCount: tabIds.length, source: 'category' });
         }
       } catch (e) {
         console.warn('[TabMaster] Could not group category tabs for', label, e);
@@ -646,36 +728,23 @@ export async function autoGroupByDomain(windowId, forceReGroupAll = false) {
   //   Global toggle: settings.subdomainGrouping
   //   Per-host patterns: settings.subdomainDomains [{ type, value }] — typed matches
   const useSubdomainGlobal = !!settings.subdomainGrouping;
+  const subdomainPatterns = settings.subdomainDomains || [];
 
   /**
-   * Returns true if the given hostname should use subdomain grouping
-   * based on the typed patterns in settings.subdomainDomains.
+   * Returns true if the given hostname should use subdomain grouping.
+   * If the list is empty, applies to all domains. Otherwise, only matches explicitly.
    */
   function hostMatchesSubdomainPattern(hostname) {
+    if (subdomainPatterns.length === 0) return true;
     const baseDomain = hostname.split('.').slice(-2).join('.');
-    return (settings.subdomainDomains || []).some((p) => {
-      if (typeof p === 'string') {
-        // Backward compat: plain string treated as base-domain match
-        const v = p.trim().toLowerCase();
-        return baseDomain === v || hostname === v;
-      }
-      const { type, value } = p;
-      if (!value) return false;
-      const v = value.toLowerCase();
-      switch (type) {
-        case 'base-domain':       return baseDomain === v || hostname === v;
-        case 'hostname-contains': return hostname.includes(v);
-        case 'hostname-exact':    return hostname === v;
-        case 'regex': {
-          try { return new RegExp(value, 'i').test(hostname); } catch { return false; }
-        }
-        default: return baseDomain === v || hostname === v;
-      }
+    return subdomainPatterns.some((p) => {
+      const v = typeof p === 'string' ? p.trim().toLowerCase() : (p.value || '').trim().toLowerCase();
+      return baseDomain === v || hostname === v || hostname.includes(v);
     });
   }
 
   const groupNameMap = {}; // key → { label, tabIds[], color }
-  const alreadyMatched = (id) => customMatchedTabIds.has(id) || categoryMatchedTabIds.has(id);
+  const alreadyMatched = (id) => categoryMatchedTabIds.has(id);
 
   if (settings.groupByDomain !== false) {
     for (const tab of tabs) {
@@ -683,9 +752,9 @@ export async function autoGroupByDomain(windowId, forceReGroupAll = false) {
       const domain = getDomain(tab.url);
       if (!domain || excluded.has(domain)) continue;
 
-      // Decide subdomain mode: per-host typed patterns OR global toggle
+      // Decide subdomain mode: only applies if global switch is ON and pattern matches
       const hostname = (() => { try { return new URL(tab.url).hostname.toLowerCase(); } catch { return ''; } })();
-      const useSubdomain = hostMatchesSubdomainPattern(hostname) || useSubdomainGlobal;
+      const useSubdomain = useSubdomainGlobal && hostMatchesSubdomainPattern(hostname);
 
       let key, label, colorSeed;
 
@@ -708,26 +777,107 @@ export async function autoGroupByDomain(windowId, forceReGroupAll = false) {
   }
 
   for (const { label, tabIds, color } of Object.values(groupNameMap)) {
-    if (tabIds.length < 1) continue;
+    if (tabIds.length < 2 && settings.groupSingleTabs === false) continue;
     try {
       const existing = existingGroups.find((g) => g.title === label);
       if (existing) {
+        const newCount = tabIds.filter(id => allTabs.find(t => t.id === id)?.groupId !== existing.id).length;
         await markProgrammaticTabs(tabIds);
         await chrome.tabs.group({ tabIds, groupId: existing.id });
-        results.push({ groupId: existing.id, title: label, color, count: tabIds.length, source: 'domain' });
+        results.push({ groupId: existing.id, title: label, color, count: tabIds.length, newlyGroupedCount: newCount, source: 'domain' });
       } else {
         await markProgrammaticTabs(tabIds);
         const groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
         await chrome.tabGroups.update(groupId, { color, title: label });
         existingGroups.push({ id: groupId, title: label, color });
-        results.push({ groupId, title: label, color, count: tabIds.length, source: 'domain' });
+        results.push({ groupId, title: label, color, count: tabIds.length, newlyGroupedCount: tabIds.length, source: 'domain' });
       }
     } catch (e) {
       console.warn('[TabMaster] Could not group domain tabs for', label, e);
     }
   }
 
+  const totalGrouped = results.reduce((sum, r) => sum + (r.newlyGroupedCount || 0), 0);
+  if (totalGrouped > 0) {
+    incrementStat('tabsAutoGrouped', totalGrouped);
+  }
+
+  // ── Step 3: Enforce Physical Ordering (Optional) ──────────────
+  if (settings.sortTabsAndGroups !== false) {
+    await sortTabsAndGroupsInWindow(windowId, settings);
+  }
+
+  // ── Step 4: Ensure active tab's group is expanded ───────────
+  try {
+    const [activeTab] = await chrome.tabs.query({ windowId, active: true });
+    if (activeTab && activeTab.groupId !== -1) {
+      await chrome.tabGroups.update(activeTab.groupId, { collapsed: false });
+    }
+  } catch (e) {
+    console.warn('[TabMaster] Could not expand active group', e);
+  }
+
   return results;
+}
+
+async function sortTabsAndGroupsInWindow(windowId, settings) {
+  const tabs = await chrome.tabs.query({ windowId });
+  const groups = await chrome.tabGroups.query({ windowId });
+  
+  if (groups.length === 0 && tabs.length === 0) return;
+
+  // Re-build category order mapping
+  const categoryOrderMap = {};
+  let orderIndex = 0;
+  
+  // We need BUILTIN_CATEGORIES. It's imported at the top.
+  const builtInMap = Object.fromEntries(BUILTIN_CATEGORIES.map(c => [c.id, c]));
+  const customMap = Object.fromEntries((settings.customCategories || []).map(c => [c.id, c]));
+  const order = settings.categoryOrder || [];
+  const overrides = settings.categoryOverrides || {};
+
+  const evaluateOrder = [...order];
+  const allCatIds = new Set([...Object.keys(builtInMap), ...Object.keys(customMap)]);
+  for (const id of allCatIds) {
+    if (!evaluateOrder.includes(id)) evaluateOrder.push(id);
+  }
+
+  for (const catId of evaluateOrder) {
+    let label;
+    if (customMap[catId]) {
+      const cat = customMap[catId];
+      label = `${cat.emoji || '📁'} ${cat.name || 'Custom'}`;
+    } else if (builtInMap[catId]) {
+      const cat = builtInMap[catId];
+      const ov = overrides[catId] || {};
+      label = `${cat.emoji} ${ov.name || cat.name}`;
+    }
+    if (label) {
+      categoryOrderMap[label] = orderIndex++;
+    }
+  }
+
+  // Sort groups: Categories first (by defined order), then alphabetical for the rest
+  const sortedGroups = [...groups].sort((a, b) => {
+    const aOrder = categoryOrderMap[a.title] !== undefined ? categoryOrderMap[a.title] : 99999;
+    const bOrder = categoryOrderMap[b.title] !== undefined ? categoryOrderMap[b.title] : 99999;
+    
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+    return (a.title || '').localeCompare(b.title || '');
+  });
+
+  // Move each group physically to the end of the window in sorted order
+  for (const g of sortedGroups) {
+    await chrome.tabGroups.move(g.id, { index: -1 });
+  }
+
+  // Gather all unpinned, ungrouped tabs and push them to the very end
+  const ungroupedTabs = tabs.filter(t => !t.pinned && t.groupId === -1);
+  if (ungroupedTabs.length > 0) {
+    await chrome.tabs.move(ungroupedTabs.map(t => t.id), { index: -1 });
+  }
 }
 
 /**
@@ -779,6 +929,7 @@ export async function closeDuplicateTabs(windowId) {
 
   if (toClose.length > 0) {
     await chrome.tabs.remove(toClose);
+    await incrementStat('tabsCleanedUp', toClose.length);
   }
   return toClose.length;
 }
@@ -804,6 +955,7 @@ export async function closeInactiveTabs(windowId, days) {
 
   if (toClose.length > 0) {
     await chrome.tabs.remove(toClose);
+    await incrementStat('tabsCleanedUp', toClose.length);
   }
   return toClose.length;
 }
@@ -831,7 +983,10 @@ export async function hibernateTabs(windowId) {
 export async function closeOtherTabs(windowId) {
   const tabs = await chrome.tabs.query({ windowId, active: false, pinned: false });
   const ids = tabs.map((t) => t.id);
-  if (ids.length > 0) await chrome.tabs.remove(ids);
+  if (ids.length > 0) {
+    await chrome.tabs.remove(ids);
+    await incrementStat('tabsCleanedUp', ids.length);
+  }
   return ids.length;
 }
 

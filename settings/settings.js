@@ -2,12 +2,13 @@
  * TabMaster Pro — Settings Page Logic
  */
 
-import { getSettings, saveSettings, getSessions, deleteSession, getCustomRules, addCustomRule, updateCustomRule, deleteCustomRule, saveCustomRules, tabMatchesRule } from '../utils/storage.js';
+import { getSettings, saveSettings, getSessions, deleteSession, getStats } from '../utils/storage.js';
 import {
   autoGroupByDomain, ungroupAllTabs, closeDuplicateTabs,
-  closeInactiveTabs, hibernateTabs, BUILTIN_CATEGORIES
+  closeInactiveTabs, hibernateTabs, BUILTIN_CATEGORIES, tabMatchesCategory
 } from '../utils/tabManager.js';
 import { importSession } from '../utils/sessionManager.js';
+import { customConfirm } from '../utils/ui.js';
 
 // ─── State ────────────────────────────────────────────────
 let currentSettings = {};
@@ -15,13 +16,14 @@ let isDirty = false;
 let importFileData = null;
 
 const SECTION_LABELS = {
+  dashboard: { heading: 'Dashboard', desc: 'Welcome back! Here is a summary of your workspace.' },
   general: { heading: 'General Settings', desc: 'Customize your TabMaster Pro experience' },
   grouping: { heading: 'Tab Grouping', desc: 'Configure auto-grouping behavior and exclusions' },
   cleanup: { heading: 'Tab Cleanup', desc: 'Manage stale and duplicate tab removal' },
   sessions: { heading: 'Session Management', desc: 'Save, restore, and import tab sessions' },
   notifications: { heading: 'Notifications', desc: 'Control when TabMaster sends alerts' },
-  rules: { heading: 'Custom Group Rules', desc: 'Define smart rules to group tabs by URL pattern, hostname, title, or regex' },
   data: { heading: 'Data & Storage', desc: 'Manage your saved data and reset settings' },
+  about: { heading: 'About ForgeDot Tools', desc: 'Information about TabMaster Pro and the developer' },
 };
 
 // ─── Init ─────────────────────────────────────────────────
@@ -41,11 +43,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   initCleanupActions();
   initDataSection();
   initSessionImport();
-  initRules();
   initTabInsights();
-  initCategories();
-  initCustomCategories();
+  initUnifiedCategories();
   initGroupingWiring();
+  
+  if (document.querySelector('.nav-item.active[data-section="dashboard"]')) {
+    const labels = SECTION_LABELS['dashboard'];
+    document.getElementById('section-heading').textContent = labels.heading;
+    document.getElementById('section-desc').textContent = labels.desc;
+    initDashboard();
+    if (tiAllTabs.length === 0) loadTabInsights();
+  }
 });
 
 // ─── Navigation ────────────────────────────────────────────
@@ -61,6 +69,10 @@ function initNavigation() {
       const labels = SECTION_LABELS[sectionId] || {};
       document.getElementById('section-heading').textContent = labels.heading || '';
       document.getElementById('section-desc').textContent = labels.desc || '';
+      
+      if (sectionId === 'dashboard') {
+        initDashboard();
+      }
     });
   });
 }
@@ -71,6 +83,7 @@ function populateSettings(s) {
   document.querySelectorAll('.theme-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.theme === s.theme);
   });
+  applyTheme(s.theme || 'dark');
 
   // Toggles
   setToggle('setting-showTabCount', s.showTabCount);
@@ -79,25 +92,24 @@ function populateSettings(s) {
   setToggle('setting-autoGroupOnStartup', s.autoGroupOnStartup);
   setToggle('setting-groupByDomain', s.groupByDomain !== false); // default true
   setToggle('setting-subdomainGrouping', s.subdomainGrouping);
+  setToggle('setting-groupSingleTabs', s.groupSingleTabs !== false); // default true
+  setToggle('setting-sortTabsAndGroups', s.sortTabsAndGroups !== false); // default true
   setToggle('setting-sortGroupsAlphabetically', s.sortGroupsAlphabetically);
   setToggle('setting-groupCollapseAfterSwitch', s.groupCollapseAfterSwitch);
   setToggle('setting-autoSaveSession', s.autoSaveSession);
   setToggle('setting-notificationsEnabled', s.notificationsEnabled);
 
-  // Subdomain domain typed patterns — rendered into sd-pat-list
-  sdDomPatterns = JSON.parse(JSON.stringify(s.subdomainDomains || []));
-  renderSdPatList();
-
-  // Sync visibility of child panels based on restored toggle states
-  syncSubdomainChildVisibility();
-
   // Number inputs
   setNumber('setting-tabLimitWarning', s.tabLimitWarning);
   setNumber('setting-inactiveDays', s.inactiveDays);
 
-  // Excluded domains
-  const excludedEl = document.getElementById('setting-excludedDomains');
-  if (excludedEl) excludedEl.value = (s.excludedDomains || []).join('\n');
+  // Tags Arrays
+  sdDomPatterns = [...(s.subdomainDomains || [])];
+  excDomPatterns = [...(s.excludedDomains || [])];
+  
+  if (typeof renderSdTagList === 'function') renderSdTagList();
+  if (typeof renderExcTagList === 'function') renderExcTagList();
+  if (typeof syncSubdomainChildVisibility === 'function') syncSubdomainChildVisibility();
 }
 
 function setToggle(id, value) {
@@ -113,14 +125,6 @@ function setNumber(id, value) {
 // ─── Collect Settings from UI ──────────────────────────────
 function collectSettings() {
   const theme = document.querySelector('.theme-btn.active')?.dataset.theme || 'dark';
-  const excludedRaw = document.getElementById('setting-excludedDomains')?.value || '';
-  const excludedDomains = excludedRaw
-    .split('\n')
-    .map((d) => d.trim().toLowerCase())
-    .filter(Boolean);
-
-  const sdDomsRaw = document.getElementById('setting-subdomainDomains')?.value || '';
-  const subdomainDomains = sdDomsRaw.split('\n').map((d) => d.trim().toLowerCase()).filter(Boolean);
 
   return {
     theme,
@@ -130,21 +134,33 @@ function collectSettings() {
     autoGroupOnStartup: getToggle('setting-autoGroupOnStartup'),
     groupByDomain: getToggle('setting-groupByDomain'),
     subdomainGrouping: getToggle('setting-subdomainGrouping'),
-    subdomainDomains: JSON.parse(JSON.stringify(sdDomPatterns)),
-    categoryOverrides: collectCategoryOverrides(),
-    customCategories: collectCustomCategories(),
+    groupSingleTabs: getToggle('setting-groupSingleTabs'),
+    sortTabsAndGroups: getToggle('setting-sortTabsAndGroups'),
     sortGroupsAlphabetically: getToggle('setting-sortGroupsAlphabetically'),
     groupCollapseAfterSwitch: getToggle('setting-groupCollapseAfterSwitch'),
     autoSaveSession: getToggle('setting-autoSaveSession'),
     notificationsEnabled: getToggle('setting-notificationsEnabled'),
     tabLimitWarning: parseInt(document.getElementById('setting-tabLimitWarning')?.value || '20'),
     inactiveDays: parseInt(document.getElementById('setting-inactiveDays')?.value || '7'),
-    excludedDomains,
+    subdomainDomains: [...sdDomPatterns],
+    excludedDomains: [...excDomPatterns],
+    categoryOverrides: collectCategoryOverrides(),
+    customCategories: collectCustomCategories(),
+    categoryOrder: [...localCategoryOrder],
   };
 }
 
 function getToggle(id) {
   return document.getElementById(id)?.checked || false;
+}
+
+function applyTheme(theme) {
+  if (theme === 'system') {
+    const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  } else {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
 }
 
 // ─── Form Listeners (track dirty state) ────────────────────
@@ -154,13 +170,15 @@ function initFormListeners() {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.theme-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      markDirty();
+      const theme = btn.dataset.theme;
+      applyTheme(theme);
+      autoSave();
     });
   });
 
   // All checkboxes
   document.querySelectorAll('input[type="checkbox"]').forEach((el) => {
-    el.addEventListener('change', markDirty);
+    el.addEventListener('change', autoSave);
   });
 
   // Number inputs
@@ -178,6 +196,15 @@ function markDirty() {
   isDirty = true;
   const saveBar = document.getElementById('save-bar');
   if (saveBar) saveBar.style.display = 'flex';
+}
+
+async function autoSave() {
+  const newSettings = collectSettings();
+  await saveSettings(newSettings);
+  currentSettings = newSettings;
+  isDirty = false;
+  const saveBar = document.getElementById('save-bar');
+  if (saveBar) saveBar.style.display = 'none';
 }
 
 // ─── Save Bar ──────────────────────────────────────────────
@@ -227,7 +254,7 @@ function initCleanupActions() {
   });
 
   document.getElementById('qa-close-inactive')?.addEventListener('click', async () => {
-    if (!confirm('Close all inactive tabs?')) return;
+    if (!(await customConfirm('Close all inactive tabs?', 'Cleanup Tabs', 'Close Tabs', true))) return;
     const win = await chrome.windows.getLastFocused();
     const days = parseInt(document.getElementById('setting-inactiveDays')?.value || '7');
     const count = await closeInactiveTabs(win?.id, days);
@@ -235,7 +262,7 @@ function initCleanupActions() {
   });
 
   document.getElementById('qa-ungroup-all')?.addEventListener('click', async () => {
-    if (!confirm('Ungroup all tabs?')) return;
+    if (!(await customConfirm('Ungroup all tabs?', 'Ungroup Tabs', 'Ungroup', true))) return;
     const win = await chrome.windows.getLastFocused();
     const count = await ungroupAllTabs(win?.id);
     setQaResult(`Ungrouped ${count} tab(s)`);
@@ -256,9 +283,17 @@ async function initDataSection() {
     activitySizeEl.textContent = `${count} tab record(s)`;
   }
 
+  // Reset Stats
+  document.getElementById('btn-reset-stats')?.addEventListener('click', async () => {
+    if (!(await customConfirm('Reset dashboard lifetime stats to zero?', 'Reset Stats', 'Reset', true))) return;
+    await chrome.storage.local.remove('extensionStats');
+    showToast('Dashboard stats reset', 'success');
+    initDashboard();
+  });
+
   // Clear activity
   document.getElementById('btn-clear-activity')?.addEventListener('click', async () => {
-    if (!confirm('Clear tab activity log?')) return;
+    if (!(await customConfirm('Clear tab activity log?', 'Clear Log', 'Clear', true))) return;
     await chrome.storage.local.remove('tabActivity');
     showToast('Activity log cleared', 'success');
     if (activitySizeEl) activitySizeEl.textContent = '0 tab record(s)';
@@ -266,22 +301,15 @@ async function initDataSection() {
 
   // Clear sessions
   document.getElementById('btn-clear-sessions')?.addEventListener('click', async () => {
-    if (!confirm('Delete ALL saved sessions? This cannot be undone.')) return;
+    if (!(await customConfirm('Delete ALL saved sessions? This cannot be undone.', 'Delete Sessions', 'Delete All', true))) return;
     await chrome.storage.local.remove('sessions');
     showToast('All sessions deleted', 'success');
     if (sessionCountEl) sessionCountEl.textContent = '0 session(s)';
   });
 
   // Reset settings
-  document.getElementById('btn-reset-settings')?.addEventListener('click', async () => {
-    if (!confirm('Reset all settings to defaults? Your sessions will NOT be deleted.')) return;
-    await chrome.storage.local.remove('settings');
-    const defaults = await getSettings(); // returns defaults
-    currentSettings = defaults;
-    populateSettings(defaults);
-    isDirty = false;
-    document.getElementById('save-bar').style.display = 'none';
-    showToast('Settings reset to defaults', 'success');
+  document.getElementById('btn-reset-settings')?.addEventListener('click', () => {
+    openResetSettingsModal();
   });
 }
 
@@ -332,337 +360,13 @@ function showToast(message, type = '') {
   toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 3000);
 }
 
-// ─── Custom Group Rules ────────────────────────────────────
 
-const MATCH_TYPE_LABELS = {
-  'url-contains':      { label: 'URL Contains',      hint: 'One per line — case-insensitive substring of the full URL' },
-  'hostname-contains': { label: 'Hostname Contains',  hint: 'One per line — substring of the full hostname including subdomains' },
-  'hostname-exact':    { label: 'Exact Hostname',     hint: 'One per line — exact match of the full subdomain (e.g. mail.google.com only, not drive.google.com)' },
-  'base-domain':       { label: 'Base Domain',        hint: 'One per line — matches only the registrable domain, all subdomains match (e.g. google.com matches mail, drive, docs…)' },
-  'title-contains':    { label: 'Tab Title Contains', hint: 'One per line — matched against the visible tab title text' },
-  'regex':             { label: 'Regex (URL)',         hint: 'One regex per line — tested against the full URL (case-insensitive)' },
-};
-
-const GROUP_COLOR_HEX = {
-  blue:'#4285f4', green:'#34a853', red:'#ea4335', yellow:'#fbbc04',
-  pink:'#ff6d94', purple:'#a142f4', cyan:'#24c1e0', orange:'#ff8c00', grey:'#8b949e'
-};
-
-let editingRuleId = null; // null = creating new, string = editing existing
-let selectedRuleColor = 'blue';
-let selectedMatchType = 'url-contains';
-
-function initRules() {
-  renderRules();
-
-  // Add rule button
-  document.getElementById('btn-add-rule')?.addEventListener('click', () => openEditor(null));
-
-  // Editor close buttons
-  document.getElementById('btn-close-editor')?.addEventListener('click', closeEditor);
-  document.getElementById('btn-cancel-rule')?.addEventListener('click', closeEditor);
-
-  // Color picker
-  document.querySelectorAll('.re-color-dot').forEach((dot) => {
-    dot.addEventListener('click', () => {
-      document.querySelectorAll('.re-color-dot').forEach((d) => d.classList.remove('active'));
-      dot.classList.add('active');
-      selectedRuleColor = dot.dataset.color;
-    });
-  });
-
-  // Match type selector
-  document.querySelectorAll('.match-type-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.match-type-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedMatchType = btn.dataset.type;
-      // Update textarea hint
-      const hint = MATCH_TYPE_LABELS[selectedMatchType]?.hint || '';
-      const hintEl = document.getElementById('re-patterns-hint');
-      if (hintEl) hintEl.textContent = `— ${hint}`;
-      // Update placeholder
-      const ta = document.getElementById('re-patterns');
-      if (ta) {
-        const placeholders = {
-          'url-contains':      'bank.in\nhdfc\nsbi\nicici',
-          'hostname-contains': 'hdfc.bank.in\nsbi.bank.in\nmail.google.com',
-          'hostname-exact':    'mail.google.com\ndrive.google.com\ndocs.google.com',
-          'base-domain':       'google.com\nbank.in\ngithub.com',
-          'title-contains':    'HDFC\nSBI\nNet Banking',
-          'regex':             '.*\\.bank\\.in.*\nhdfc|sbi|icici',
-        };
-        ta.placeholder = placeholders[selectedMatchType] || '';
-      }
-    });
-  });
-
-  // Test rule
-  document.getElementById('btn-test-rule')?.addEventListener('click', async () => {
-    const rule = collectEditorRule();
-    if (!rule.patterns || rule.patterns.length === 0) {
-      showToast('Add at least one pattern to test', 'error'); return;
-    }
-    const tabs = await chrome.tabs.query({});
-    const matches = tabs.filter((t) => tabMatchesRule(t, { ...rule, enabled: true }));
-    const resultEl = document.getElementById('re-test-result');
-    if (!resultEl) return;
-    resultEl.style.display = 'block';
-    if (matches.length === 0) {
-      resultEl.innerHTML = `<span style="color:var(--text-muted)">No open tabs match this rule right now.</span>`;
-    } else {
-      resultEl.innerHTML = `
-        <strong style="color:var(--accent)">${matches.length} tab${matches.length !== 1 ? 's' : ''} would be grouped</strong>
-        <div class="match-list">${matches.map((t) => `
-          <div class="match-row">
-            ${t.favIconUrl ? `<img class="match-favicon" src="${escHtml(t.favIconUrl)}" />` : ''}
-            <span class="match-title">${escHtml(t.title || 'Untitled')}</span>
-            <span class="match-url">${escHtml(t.url || '')}</span>
-          </div>`).join('')}
-        </div>`;
-      // Hide broken favicons — CSP-safe: no inline handlers
-      resultEl.querySelectorAll('img.match-favicon').forEach((img) => {
-        img.addEventListener('error', () => { img.style.display = 'none'; });
-      });
-    }
-  });
-
-  // Save rule
-  document.getElementById('btn-save-rule')?.addEventListener('click', async () => {
-    const rule = collectEditorRule();
-    if (!rule.name.trim()) { showToast('Please enter a group name', 'error'); return; }
-    if (!rule.patterns || rule.patterns.length === 0) { showToast('Add at least one pattern', 'error'); return; }
-
-    if (editingRuleId) {
-      await updateCustomRule(editingRuleId, rule);
-      showToast(`✅ Rule "${rule.name}" updated`, 'success');
-    } else {
-      await addCustomRule(rule);
-      showToast(`✅ Rule "${rule.name}" created`, 'success');
-    }
-    closeEditor();
-    await renderRules();
-  });
-
-  // Export rules
-  document.getElementById('btn-export-rules')?.addEventListener('click', async () => {
-    const rules = await getCustomRules();
-    if (rules.length === 0) { showToast('No rules to export', ''); return; }
-    const blob = new Blob([JSON.stringify(rules, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tabmaster-rules-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('✅ Rules exported', 'success');
-  });
-
-  // Import rules
-  document.getElementById('rules-import-input')?.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const imported = JSON.parse(text);
-      if (!Array.isArray(imported)) throw new Error('Invalid format');
-      // Merge: assign new IDs to avoid collisions
-      const existing = await getCustomRules();
-      const merged = [
-        ...existing,
-        ...imported.map((r) => ({ ...r, id: `rule_${Date.now()}_${Math.random().toString(36).slice(2)}` }))
-      ];
-      await saveCustomRules(merged);
-      await renderRules();
-      showToast(`✅ Imported ${imported.length} rule(s)`, 'success');
-    } catch {
-      showToast('❌ Invalid rules file', 'error');
-    }
-    e.target.value = '';
-  });
-}
-
-/** Open the editor, pre-filling for edit or blank for new */
-function openEditor(rule) {
-  editingRuleId = rule?.id || null;
-  selectedRuleColor = rule?.color || 'blue';
-  selectedMatchType = rule?.matchType || 'url-contains';
-
-  // Set title
-  const titleEl = document.getElementById('rule-editor-title');
-  if (titleEl) titleEl.textContent = rule ? `Edit Rule — ${rule.name}` : 'New Rule';
-
-  // Fill fields
-  const nameEl = document.getElementById('re-name');
-  if (nameEl) nameEl.value = rule?.name || '';
-
-  const patternsEl = document.getElementById('re-patterns');
-  if (patternsEl) patternsEl.value = (rule?.patterns || []).join('\n');
-
-  const enabledEl = document.getElementById('re-enabled');
-  if (enabledEl) enabledEl.checked = rule ? (rule.enabled !== false) : true;
-
-  // Color dots
-  document.querySelectorAll('.re-color-dot').forEach((d) => {
-    d.classList.toggle('active', d.dataset.color === selectedRuleColor);
-  });
-
-  // Match type buttons
-  document.querySelectorAll('.match-type-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.type === selectedMatchType);
-  });
-
-  // Update hint
-  const hintEl = document.getElementById('re-patterns-hint');
-  if (hintEl) hintEl.textContent = `— ${MATCH_TYPE_LABELS[selectedMatchType]?.hint || ''}`;
-
-  // Clear test result
-  const testResultEl = document.getElementById('re-test-result');
-  if (testResultEl) { testResultEl.style.display = 'none'; testResultEl.innerHTML = ''; }
-
-  document.getElementById('rule-editor').style.display = 'block';
-  document.getElementById('re-name')?.focus();
-}
-
-function closeEditor() {
-  document.getElementById('rule-editor').style.display = 'none';
-  editingRuleId = null;
-}
-
-/** Collect current editor form into a rule object */
-function collectEditorRule() {
-  const patternsRaw = document.getElementById('re-patterns')?.value || '';
-  const patterns = patternsRaw
-    .split('\n')
-    .map((p) => p.trim())
-    .filter(Boolean);
-  return {
-    name: (document.getElementById('re-name')?.value || '').trim(),
-    color: selectedRuleColor,
-    matchType: selectedMatchType,
-    patterns,
-    enabled: document.getElementById('re-enabled')?.checked !== false,
-  };
-}
-
-/** Render the rules list */
-async function renderRules() {
-  const container = document.getElementById('rules-list');
-  const emptyEl = document.getElementById('rules-empty');
-  const rules = await getCustomRules();
-
-  if (rules.length === 0) {
-    container.innerHTML = '';
-    if (emptyEl) { emptyEl.style.display = 'flex'; container.appendChild(emptyEl); }
-    return;
-  }
-
-  if (emptyEl) emptyEl.style.display = 'none';
-
-  container.innerHTML = rules.map((rule, idx) => {
-    const colorHex = GROUP_COLOR_HEX[rule.color] || '#8b949e';
-    const matchLabel = MATCH_TYPE_LABELS[rule.matchType || 'url-contains']?.label || rule.matchType;
-    const patternsPreview = (rule.patterns || []).join(', ');
-    const isDisabled = rule.enabled === false;
-
-    return `
-    <div class="rule-card${isDisabled ? ' disabled' : ''}" data-id="${rule.id}">
-      <div class="rule-priority-btns">
-        <button class="priority-btn" data-action="up" data-idx="${idx}" title="Move up" ${idx === 0 ? 'disabled style="opacity:0.3"' : ''}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button class="priority-btn" data-action="down" data-idx="${idx}" title="Move down" ${idx === rules.length - 1 ? 'disabled style="opacity:0.3"' : ''}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-      </div>
-
-      <div class="rule-swatch" style="background:${colorHex}"></div>
-
-      <div class="rule-info">
-        <div class="rule-card-name">${escHtml(rule.name)}</div>
-        <div class="rule-card-meta">
-          <span class="rule-badge">${rule.patterns?.length || 0} pattern${(rule.patterns?.length || 0) !== 1 ? 's' : ''}</span>
-          <span class="rule-badge match-type">${matchLabel}</span>
-          ${isDisabled ? '<span class="rule-badge" style="background:rgba(248,81,73,0.1);border-color:rgba(248,81,73,0.2);color:var(--danger)">Disabled</span>' : ''}
-        </div>
-        <div class="rule-patterns-preview" title="${escHtml(patternsPreview)}">${escHtml(patternsPreview)}</div>
-      </div>
-
-      <div class="rule-card-actions">
-        <button class="rule-action-btn" data-action="toggle" data-id="${rule.id}" title="${isDisabled ? 'Enable' : 'Disable'}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${isDisabled
-            ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
-            : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
-          }</svg>
-        </button>
-        <button class="rule-action-btn" data-action="edit" data-id="${rule.id}" title="Edit">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </button>
-        <button class="rule-action-btn danger" data-action="delete" data-id="${rule.id}" title="Delete">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-        </button>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Attach action handlers
-  container.querySelectorAll('[data-action="edit"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const rules = await getCustomRules();
-      const rule = rules.find((r) => r.id === btn.dataset.id);
-      if (rule) openEditor(rule);
-    });
-  });
-
-  container.querySelectorAll('[data-action="delete"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const rules = await getCustomRules();
-      const rule = rules.find((r) => r.id === btn.dataset.id);
-      if (!confirm(`Delete rule "${rule?.name || btn.dataset.id}"?`)) return;
-      await deleteCustomRule(btn.dataset.id);
-      await renderRules();
-      showToast('Rule deleted', '');
-    });
-  });
-
-  container.querySelectorAll('[data-action="toggle"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const rules = await getCustomRules();
-      const rule = rules.find((r) => r.id === btn.dataset.id);
-      if (rule) {
-        await updateCustomRule(rule.id, { enabled: rule.enabled === false });
-        await renderRules();
-      }
-    });
-  });
-
-  container.querySelectorAll('[data-action="up"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const idx = parseInt(btn.dataset.idx);
-      const rules = await getCustomRules();
-      if (idx > 0) {
-        [rules[idx - 1], rules[idx]] = [rules[idx], rules[idx - 1]];
-        await saveCustomRules(rules);
-        await renderRules();
-      }
-    });
-  });
-
-  container.querySelectorAll('[data-action="down"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const idx = parseInt(btn.dataset.idx);
-      const rules = await getCustomRules();
-      if (idx < rules.length - 1) {
-        [rules[idx], rules[idx + 1]] = [rules[idx + 1], rules[idx]];
-        await saveCustomRules(rules);
-        await renderRules();
-      }
-    });
-  });
-}
 
 function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"'/]/g, (s) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '/': '&#x2F;'
+  }[s]));
 }
 
 // ─── Tab Insights ─────────────────────────────────────────────
@@ -694,16 +398,11 @@ function initTabInsights() {
   // Refresh button
   document.getElementById('ti-refresh')?.addEventListener('click', () => loadTabInsights());
 
-  // Clicking a summary card sets the matching filter
-  document.getElementById('ti-card-dupes')?.addEventListener('click', () => setFilter('duplicates'));
-  document.getElementById('ti-card-bg')?.addEventListener('click',   () => setFilter('background'));
-  document.getElementById('ti-card-hibernated')?.addEventListener('click', () => setFilter('hibernated'));
-  document.getElementById('ti-card-total')?.addEventListener('click', () => setFilter('all'));
 
   // Load when section first becomes visible
   document.querySelectorAll('.nav-item').forEach((item) => {
     item.addEventListener('click', () => {
-      if (item.dataset.section === 'tabs' && tiAllTabs.length === 0) {
+      if (item.dataset.section === 'dashboard' && tiAllTabs.length === 0) {
         loadTabInsights();
       }
     });
@@ -755,6 +454,7 @@ async function loadTabInsights() {
     });
 
     // Update summary counts
+    document.getElementById('ti-pinned').textContent    = tiAllTabs.filter((t) => t.pinned).length;
     document.getElementById('ti-total').textContent     = tiAllTabs.length;
     document.getElementById('ti-dupes').textContent     = tiAllTabs.filter((t) => t._isDupe).length;
     document.getElementById('ti-bg').textContent        = tiAllTabs.filter((t) => t._isBg).length;
@@ -812,9 +512,11 @@ function renderTabList() {
     list.innerHTML = tabs.map(tabRowHtml).join('');
   }
 
-  // Hide broken favicons — CSP-safe: no inline onerror handlers
+  // Handle broken favicons without breaking layout
   list.querySelectorAll('img.ti-favicon').forEach((img) => {
-    img.addEventListener('error', () => { img.style.display = 'none'; });
+    img.addEventListener('error', () => { 
+      img.outerHTML = '<div class="ti-favicon-placeholder">🌐</div>'; 
+    });
   });
 
   // ── Stale-tab guard ──────────────────────────────────────────────────────
@@ -841,11 +543,14 @@ function renderTabList() {
         if (act === 'focus') {
           const tab = tiAllTabs.find((t) => t.id === tabId);
           if (tab) {
+            if (tab.groupId !== -1) {
+              try { await chrome.tabGroups.update(tab.groupId, { collapsed: false }); } catch(e){}
+            }
             await chrome.windows.update(tab.windowId, { focused: true });
             await chrome.tabs.update(tabId, { active: true });
           }
         } else if (act === 'close') {
-          if (confirm('Close this tab?')) {
+          if (await customConfirm('Close this tab?', 'Close Tab', 'Close', true)) {
             await chrome.tabs.remove(tabId);
             await loadTabInsights();
           }
@@ -950,7 +655,7 @@ function updateBulkBar() {
 
   // Bulk action handlers
   document.getElementById('ti-bulk-close-dupes')?.addEventListener('click', async () => {
-    if (!confirm(`Close ${tabs.length} duplicate tabs?`)) return;
+    if (!(await customConfirm(`Close ${tabs.length} duplicate tabs?`, 'Close Tabs', 'Close', true))) return;
     const seen = new Set();
     const toClose = [];
     for (const t of tiAllTabs) {
@@ -971,7 +676,7 @@ function updateBulkBar() {
   });
 
   document.getElementById('ti-bulk-hibernate-bg')?.addEventListener('click', async () => {
-    if (!confirm(`Hibernate ${tabs.length} background tabs?`)) return;
+    if (!(await customConfirm(`Hibernate ${tabs.length} background tabs?`, 'Hibernate Tabs', 'Hibernate'))) return;
     for (const t of tabs) {
       try { await chrome.tabs.discard(t.id); } catch { /* skip active/pinned */ }
     }
@@ -980,7 +685,7 @@ function updateBulkBar() {
   });
 
   document.getElementById('ti-bulk-close-inactive')?.addEventListener('click', async () => {
-    if (!confirm(`Close ${tabs.length} inactive tabs? This cannot be undone.`)) return;
+    if (!(await customConfirm(`Close ${tabs.length} inactive tabs? This cannot be undone.`, 'Close Tabs', 'Close', true))) return;
     // Filter out any tabs that closed since the list was rendered
     const ids = tabs.map((t) => t.id);
     const stillOpen = (await Promise.all(
@@ -1023,270 +728,206 @@ const CAT_COLOR_HEX = {
   pink:'#ff6d94', purple:'#a142f4', cyan:'#24c1e0', orange:'#ff8c00', grey:'#8b949e',
 };
 const CAT_COLORS = Object.keys(CAT_COLOR_HEX);
+const EMOJI_OPTIONS = ['📁','💼','🛒','💸','📚','🎮','🛠️','🎨','🔒','⚙️','🚀','💡','📫','🗓️','💬','🌐'];
 
 // In-memory state for category overrides (mutated by card interactions)
 let catOverrideState = {}; // { [catId]: { enabled: bool, color: string } }
 
-function initCategories() {
-  // Categories are always active — no master toggle anymore.
-  // Just seed state from saved settings and render.
+let localCategoryOrder = [];
+let customCatState = []; // [{ id, name, emoji, color, patterns[] }]
+
+function initUnifiedCategories() {
   catOverrideState = JSON.parse(JSON.stringify(currentSettings.categoryOverrides || {}));
-  renderCategoryCards();
+  customCatState = JSON.parse(JSON.stringify(currentSettings.customCategories || []));
+  localCategoryOrder = [...(currentSettings.categoryOrder || [])];
+
+  renderUnifiedCategoryList();
+
+  document.getElementById('btn-add-custom-cat')?.addEventListener('click', () => {
+    openCustomCatEditor(null);
+  });
+
+  document.getElementById('btn-reset-cat-order')?.addEventListener('click', async () => {
+    if (await customConfirm('Reset category order to default?', 'Reset Order', 'Reset', true)) {
+      localCategoryOrder = [];
+      renderUnifiedCategoryList();
+      autoSave();
+    }
+  });
 }
 
-
-function renderCategoryCards() {
+function renderUnifiedCategoryList() {
   const grid = document.getElementById('category-cards-grid');
   if (!grid) return;
 
-  grid.innerHTML = BUILTIN_CATEGORIES.map((cat) => {
-    const ov           = catOverrideState[cat.id] || {};
-    const enabled      = ov.enabled !== false;
-    const color        = ov.color || cat.color;
-    const extraPats    = ov.extraPatterns || [];
+  const builtInMap = Object.fromEntries(BUILTIN_CATEGORIES.map(c => [c.id, c]));
+  const customMap = Object.fromEntries(customCatState.map((c, i) => [c.id, { ...c, _idx: i }]));
 
-    const colorDots = CAT_COLORS.map((c) => `
-      <button
-        class="cat-color-dot ${c === color ? 'active' : ''}"
-        data-cat="${cat.id}" data-color="${c}"
-        style="background:${CAT_COLOR_HEX[c]}" title="${c}"
-      ></button>
-    `).join('');
+  const evaluateOrder = [...localCategoryOrder];
+  const allIds = new Set([...Object.keys(builtInMap), ...Object.keys(customMap)]);
+  for (const id of allIds) {
+    if (!evaluateOrder.includes(id)) evaluateOrder.push(id);
+  }
 
-    // Built-in pattern chips (read-only)
-    const builtinChips = cat.patterns.map((p) =>
-      `<span class="pat-chip pat-chip-builtin" title="Built-in pattern">${escHtml(p)}</span>`
-    ).join('');
+  grid.innerHTML = evaluateOrder.map((catId) => {
+    const isCustom = customMap.hasOwnProperty(catId);
+    const isBuiltIn = builtInMap.hasOwnProperty(catId);
+    if (!isCustom && !isBuiltIn) return '';
 
-    // Custom extra pattern chips (removable)
-    const extraChips = extraPats.map((p, i) => {
-      const label = typeof p === 'string' ? escHtml(p) : `<span class="pat-type-badge">${escHtml(p.type)}</span>${escHtml(p.value)}`;
-      return `
-      <span class="pat-chip pat-chip-custom">
-        ${label}
-        <button class="pat-chip-remove" data-cat="${cat.id}" data-idx="${i}" title="Remove pattern">×</button>
-      </span>
-    `;
-    }).join('');
+    let innerHTML = '';
+
+    if (isCustom) {
+      const cat = customMap[catId];
+      const patCount = (cat.patterns || []).length;
+      innerHTML = `
+      <div class="cc-card ${cat.enabled !== false ? '' : 'disabled'}" data-idx="${cat._idx}" data-color="${cat.color || 'blue'}">
+        <div class="cc-card-left">
+          <div class="drag-handle" title="Drag to reorder" style="padding:0; margin-right:4px"><svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></div>
+          <span class="cc-emoji">${escHtml(cat.emoji || '📁')}</span>
+          <div class="cc-card-info">
+            <div class="cc-card-name">${escHtml(cat.name || 'Unnamed')}</div>
+            <div class="cc-card-meta">${patCount} pattern${patCount !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        <div class="cc-card-right">
+          <label class="toggle cat-toggle" style="margin-right:8px" title="${cat.enabled !== false ? 'Disable category' : 'Enable category'}">
+            <input type="checkbox" class="custom-cat-enabled-cb" data-idx="${cat._idx}" ${cat.enabled !== false ? 'checked' : ''} />
+            <span class="toggle-slider"></span>
+          </label>
+          <button class="btn btn-sm btn-secondary cc-edit-btn" data-idx="${cat._idx}">Edit</button>
+          <button class="btn btn-sm btn-danger-outline cc-del-btn" data-idx="${cat._idx}" title="Delete category">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+          </button>
+        </div>
+      </div>`;
+    } else {
+      const cat = builtInMap[catId];
+      const ov           = catOverrideState[cat.id] || {};
+      const enabled      = ov.enabled !== false;
+      const color        = ov.color || cat.color;
+      const extraPats    = ov.extraPatterns || [];
+      const patCount     = cat.patterns.length + extraPats.length;
+  
+      innerHTML = `
+      <div class="cc-card ${enabled ? '' : 'disabled'}" data-color="${color}">
+        <div class="cc-card-left">
+          <div class="drag-handle" title="Drag to reorder" style="padding:0; margin-right:4px"><svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></div>
+          <span class="cc-emoji">${escHtml(cat.emoji)}</span>
+          <div class="cc-card-info">
+            <div class="cc-card-name">${escHtml(cat.name)}</div>
+            <div class="cc-card-meta">${patCount} pattern${patCount !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        <div class="cc-card-right">
+          <label class="toggle cat-toggle" style="margin-right:8px" title="${enabled ? 'Disable category' : 'Enable category'}">
+            <input type="checkbox" class="cat-enabled-cb" data-cat="${cat.id}" ${enabled ? 'checked' : ''} />
+            <span class="toggle-slider"></span>
+          </label>
+          <button class="btn btn-sm btn-secondary builtin-edit-btn" data-cat="${cat.id}">Edit</button>
+        </div>
+      </div>`;
+    }
 
     return `
-    <div class="cat-card ${enabled ? '' : 'disabled'}" data-id="${cat.id}" data-color="${color}">
-      <div class="cat-card-header">
-        <span class="cat-emoji">${cat.emoji}</span>
-        <span class="cat-name">${escHtml(cat.name)}</span>
-        <label class="toggle cat-toggle">
-          <input type="checkbox" class="cat-enabled-cb" data-cat="${cat.id}" ${enabled ? 'checked' : ''} />
-          <span class="toggle-slider"></span>
-        </label>
+      <div class="unified-cat-item" draggable="true" data-catid="${catId}" style="width:100%">
+        <div class="unified-cat-content" style="flex:1; min-width:0;">${innerHTML}</div>
       </div>
-      <div class="cat-desc">${escHtml(cat.desc)}</div>
-      <div class="cat-color-row">${colorDots}</div>
-
-      <!-- Patterns panel -->
-      <div class="cat-patterns-toggle" data-cat="${cat.id}">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 9.5L3.5 5 2 6.5l6 6 6-6L12.5 5z"/></svg>
-        <span>View / edit patterns
-          <span class="pat-count">${cat.patterns.length + extraPats.length} patterns · ${extraPats.length} custom</span>
-        </span>
-      </div>
-      <div class="cat-patterns-panel" id="cat-panel-${cat.id}" style="display:none">
-        <div class="pat-section-label">Built-in <span class="pat-hint">(read-only, matched against URL &amp; hostname)</span></div>
-        <div class="pat-chips-row">${builtinChips}</div>
-        <div class="pat-section-label" style="margin-top:8px">Custom patterns <span class="pat-hint">(your additions)</span></div>
-        <div class="pat-chips-row pat-custom-row" id="pat-custom-${cat.id}">${extraChips || '<span class="pat-empty">None added yet</span>'}</div>
-        <div class="pat-add-row">
-          <select class="pat-type-sel input" id="pat-type-${cat.id}">
-            <option value="url-contains">URL contains</option>
-            <option value="hostname-contains">Host contains</option>
-            <option value="hostname-exact">Host exact</option>
-            <option value="base-domain">Base domain</option>
-            <option value="regex">Regex</option>
-          </select>
-          <input
-            class="pat-add-input input"
-            id="pat-input-${cat.id}"
-            placeholder="e.g. mybank.com"
-            type="text"
-          />
-          <button class="btn btn-sm pat-add-btn" data-cat="${cat.id}">+ Add</button>
-        </div>
-      </div>
-    </div>`;
+    `;
   }).join('');
 
-  // ── Wire all card interactions ─────────────────────────────
+  wireUnifiedInteractions(grid);
+  wireDragAndDrop(grid);
+}
 
-  // Enable/disable toggles
+function wireDragAndDrop(grid) {
+  let draggedItem = null;
+  
+  grid.querySelectorAll('.unified-cat-item').forEach(item => {
+    item.addEventListener('dragstart', (e) => {
+      draggedItem = item;
+      e.dataTransfer.effectAllowed = 'move';
+      item.classList.add('dragging');
+    });
+    
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      draggedItem = null;
+      
+      const newOrder = Array.from(grid.querySelectorAll('.unified-cat-item')).map(el => el.dataset.catid);
+      localCategoryOrder = newOrder;
+      autoSave();
+    });
+  });
+  
+  grid.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const afterElement = getDragAfterElement(grid, e.clientY);
+    const currentElement = draggedItem;
+    if (currentElement) {
+      if (afterElement == null) {
+        grid.appendChild(currentElement);
+      } else {
+        grid.insertBefore(currentElement, afterElement);
+      }
+    }
+  });
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.unified-cat-item:not(.dragging)')];
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+function wireUnifiedInteractions(grid) {
+  grid.querySelectorAll('.cc-edit-btn').forEach((btn) => {
+    btn.addEventListener('click', () => openCustomCatEditor(parseInt(btn.dataset.idx)));
+  });
+
+  grid.querySelectorAll('.cc-del-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      const catId = customCatState[idx].id;
+      customCatState.splice(idx, 1);
+      localCategoryOrder = localCategoryOrder.filter(id => id !== catId);
+      renderUnifiedCategoryList();
+      autoSave();
+    });
+  });
+
   grid.querySelectorAll('.cat-enabled-cb').forEach((cb) => {
     cb.addEventListener('change', () => {
       const id = cb.dataset.cat;
       catOverrideState[id] = { ...(catOverrideState[id] || {}), enabled: cb.checked };
-      grid.querySelector(`.cat-card[data-id="${id}"]`)?.classList.toggle('disabled', !cb.checked);
-      markDirty();
+      grid.querySelector(`.cc-card[data-catid="${id}"]`)?.classList.toggle('disabled', !cb.checked);
+      autoSave();
     });
   });
 
-  // Color dots
-  grid.querySelectorAll('.cat-color-dot').forEach((dot) => {
-    dot.addEventListener('click', () => {
-      const { cat: id, color } = dot.dataset;
-      catOverrideState[id] = { ...(catOverrideState[id] || {}), color };
-      const card = grid.querySelector(`.cat-card[data-id="${id}"]`);
-      if (card) {
-        card.dataset.color = color;
-        card.querySelectorAll('.cat-color-dot').forEach((d) =>
-          d.classList.toggle('active', d.dataset.color === color)
-        );
-      }
-      markDirty();
+  grid.querySelectorAll('.custom-cat-enabled-cb').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const idx = parseInt(cb.dataset.idx);
+      customCatState[idx].enabled = cb.checked;
+      renderUnifiedCategoryList();
+      autoSave();
     });
   });
 
-  // Patterns panel expand/collapse toggle
-  grid.querySelectorAll('.cat-patterns-toggle').forEach((tog) => {
-    tog.addEventListener('click', () => {
-      const id    = tog.dataset.cat;
-      const panel = document.getElementById(`cat-panel-${id}`);
-      if (!panel) return;
-      const open = panel.style.display === 'none';
-      panel.style.display = open ? '' : 'none';
-      tog.classList.toggle('open', open);
-    });
+  grid.querySelectorAll('.builtin-edit-btn').forEach((btn) => {
+    btn.addEventListener('click', () => openBuiltInCatEditor(btn.dataset.cat));
   });
-
-  // Add custom pattern
-  grid.querySelectorAll('.pat-add-btn').forEach((btn) => {
-    const id    = btn.dataset.cat;
-    const input = document.getElementById(`pat-input-${id}`);
-
-    const doAdd = () => {
-      const val  = input?.value?.trim();
-      if (!val) return;
-      const typeEl = document.getElementById(`pat-type-${id}`);
-      const type   = typeEl?.value || 'url-contains';
-      const entry  = { type, value: val.toLowerCase() };
-      const ov = catOverrideState[id] || {};
-      const extra = [...(ov.extraPatterns || [])];
-      // Dedup check
-      if (extra.some((e) => typeof e === 'object' && e.type === type && e.value === entry.value)) {
-        if (input) input.value = '';
-        return;
-      }
-      extra.push(entry);
-      catOverrideState[id] = { ...ov, extraPatterns: extra };
-      if (input) input.value = '';
-      refreshCustomChips(id, extra);
-      updatePatCountLabel(id, extra);
-      markDirty();
-    };
-
-    btn.addEventListener('click', doAdd);
-    input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } });
-  });
-
-  // Remove custom pattern (event delegation on grid)
-  grid.addEventListener('click', (e) => {
-    const btn = e.target.closest('.pat-chip-remove');
-    if (!btn) return;
-    const { cat: id, idx } = btn.dataset;
-    const ov    = catOverrideState[id] || {};
-    const extra = [...(ov.extraPatterns || [])];
-    extra.splice(parseInt(idx), 1);
-    catOverrideState[id] = { ...ov, extraPatterns: extra };
-    refreshCustomChips(id, extra);
-    updatePatCountLabel(id, extra);
-    markDirty();
-  });
-}
-
-function refreshCustomChips(catId, extraPats) {
-  const row = document.getElementById(`pat-custom-${catId}`);
-  if (!row) return;
-  if (extraPats.length === 0) {
-    row.innerHTML = '<span class="pat-empty">None added yet</span>';
-    return;
-  }
-  row.innerHTML = extraPats.map((p, i) => {
-    const label = typeof p === 'string' ? escHtml(p) : `<span class="pat-type-badge">${escHtml(p.type)}</span> ${escHtml(p.value)}`;
-    return `
-      <span class="pat-chip pat-chip-custom">
-        ${label}
-        <button class="pat-chip-remove" data-cat="${catId}" data-idx="${i}" title="Remove">×</button>
-      </span>
-    `;
-  }).join('');
-}
-
-function updatePatCountLabel(catId, extraPats) {
-  const cat   = BUILTIN_CATEGORIES.find((c) => c.id === catId);
-  const total = (cat?.patterns.length || 0) + extraPats.length;
-  const tog   = document.querySelector(`.cat-patterns-toggle[data-cat="${catId}"] .pat-count`);
-  if (tog) tog.textContent = `${total} patterns · ${extraPats.length} custom`;
 }
 
 function collectCategoryOverrides() {
   return JSON.parse(JSON.stringify(catOverrideState));
-}
-
-// ─── Custom Categories ────────────────────────────────────────────────────────
-
-let customCatState = []; // [{ id, name, emoji, color, patterns[] }]
-
-const EMOJI_OPTIONS = ['📁','⭐','🔥','💡','🎯','🛡️','🌐','🏠','📊','🔧','🎮','📚','💰','🚀','🌍','🔑','📦','🎨'];
-
-function initCustomCategories() {
-  // Seed from saved settings
-  customCatState = JSON.parse(JSON.stringify(currentSettings.customCategories || []));
-
-  renderCustomCategoryList();
-
-  // Wire the "+ New Category" button
-  document.getElementById('btn-add-custom-cat')?.addEventListener('click', () => {
-    openCustomCatEditor(null);
-  });
-}
-
-function renderCustomCategoryList() {
-  const list = document.getElementById('custom-cat-list');
-  if (!list) return;
-
-  if (customCatState.length === 0) {
-    list.innerHTML = `<div class="cc-empty">No custom categories yet. Click <strong>+ New Category</strong> to create one.</div>`;
-    return;
-  }
-
-  list.innerHTML = customCatState.map((cat, idx) => {
-    const patCount = (cat.patterns || []).length;
-    return `
-    <div class="cc-card" data-idx="${idx}" data-color="${cat.color || 'blue'}">
-      <div class="cc-card-left">
-        <span class="cc-emoji">${escHtml(cat.emoji || '📁')}</span>
-        <div class="cc-card-info">
-          <div class="cc-card-name">${escHtml(cat.name || 'Unnamed')}</div>
-          <div class="cc-card-meta">${patCount} pattern${patCount !== 1 ? 's' : ''}</div>
-        </div>
-      </div>
-      <div class="cc-card-right">
-        <button class="btn btn-sm btn-secondary cc-edit-btn" data-idx="${idx}">Edit</button>
-        <button class="btn btn-sm btn-danger-outline cc-del-btn" data-idx="${idx}" title="Delete category">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-        </button>
-      </div>
-    </div>`;
-  }).join('');
-
-  list.querySelectorAll('.cc-edit-btn').forEach((btn) => {
-    btn.addEventListener('click', () => openCustomCatEditor(parseInt(btn.dataset.idx)));
-  });
-
-  list.querySelectorAll('.cc-del-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const idx = parseInt(btn.dataset.idx);
-      customCatState.splice(idx, 1);
-      renderCustomCategoryList();
-      markDirty();
-    });
-  });
 }
 
 function renderModalPatList(overlay, pats) {
@@ -1455,14 +1096,149 @@ function openCustomCatEditor(idx) {
 
     if (isNew) {
       customCatState.push(updated);
+      localCategoryOrder.push(updated.id);
     } else {
       customCatState[idx] = updated;
     }
 
     overlay.remove();
-    renderCustomCategoryList();
-    markDirty();
+    renderUnifiedCategoryList();
+    autoSave();
     showToast(isNew ? 'Category created' : 'Category saved', 'success');
+  });
+}
+
+function openBuiltInCatEditor(catId) {
+  const cat = BUILTIN_CATEGORIES.find((c) => c.id === catId);
+  if (!cat) return;
+  const ov = catOverrideState[catId] || {};
+  let selColor = ov.color || cat.color;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'cc-overlay';
+  
+  const builtinChips = cat.patterns.map((p) =>
+    `<span class="pat-chip pat-chip-builtin" title="Built-in pattern">${escHtml(p)}</span>`
+  ).join('');
+
+  overlay.innerHTML = `
+    <div class="cc-modal">
+      <div class="cc-modal-header">
+        <span>Settings &amp; Rules</span>
+        <button class="icon-btn-sm cc-close-modal" title="Close">✕</button>
+      </div>
+
+      <div class="cc-modal-body">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom: 12px">
+          <span style="font-size:24px">${cat.emoji}</span>
+          <div>
+            <div style="font-weight:600; font-size:14px">${escHtml(cat.name)}</div>
+            <div class="cat-desc" style="margin-bottom:0">${escHtml(cat.desc)}</div>
+          </div>
+        </div>
+
+        <!-- Color -->
+        <div class="cc-field">
+          <label class="field-label">Group Color</label>
+          <div class="cat-color-row">
+            ${CAT_COLORS.map((c) => `
+              <button class="cat-color-dot cc-color-dot ${c === selColor ? 'active' : ''}"
+                data-color="${c}" style="background:${CAT_COLOR_HEX[c]}" title="${c}"></button>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Patterns -->
+        <div class="cc-field">
+          <label class="field-label">Built-in Patterns <span class="pat-hint">(read-only)</span></label>
+          <div class="pat-chips-row">${builtinChips}</div>
+        </div>
+
+        <div class="cc-field">
+          <label class="field-label">Custom Patterns <span class="field-hint">— a tab matching ANY pattern will be grouped</span></label>
+          <div class="cc-pat-list" id="cc-pat-list"></div>
+          <div class="pat-add-row" style="margin-top:8px">
+            <select class="pat-type-sel input" id="cc-pat-type">
+              <option value="url-contains">URL contains</option>
+              <option value="hostname-contains">Host contains</option>
+              <option value="hostname-exact">Host exact</option>
+              <option value="base-domain">Base domain</option>
+              <option value="regex">Regex</option>
+            </select>
+            <input class="pat-add-input input" id="cc-pat-input" placeholder="e.g. mycompany.com" type="text" />
+            <button class="btn btn-sm btn-secondary" id="cc-pat-add-btn">+ Add</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cc-modal-footer">
+        <button class="btn btn-ghost cc-close-modal">Cancel</button>
+        <button class="btn btn-primary" id="cc-save-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Save Changes
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  // Seed modal patterns from extraPatterns
+  const modalPatterns = JSON.parse(JSON.stringify(ov.extraPatterns || []));
+  renderModalPatList(overlay, modalPatterns);
+
+  // Wire pattern add button
+  const ccPatInput  = overlay.querySelector('#cc-pat-input');
+  const ccPatTypeEl = overlay.querySelector('#cc-pat-type');
+  const ccPatAddBtn = overlay.querySelector('#cc-pat-add-btn');
+
+  const doAddPat = () => {
+    const val  = ccPatInput?.value?.trim();
+    if (!val) return;
+    const type = ccPatTypeEl?.value || 'url-contains';
+    modalPatterns.push({ type, value: val.toLowerCase() });
+    ccPatInput.value = '';
+    renderModalPatList(overlay, modalPatterns);
+  };
+
+  ccPatAddBtn?.addEventListener('click', doAddPat);
+  ccPatInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doAddPat(); } });
+
+  // Wire remove buttons via event delegation on overlay
+  overlay.querySelector('#cc-pat-list')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.cc-pat-del');
+    if (!btn) return;
+    modalPatterns.splice(parseInt(btn.dataset.idx), 1);
+    renderModalPatList(overlay, modalPatterns);
+  });
+
+  // Color dots
+  overlay.querySelectorAll('.cc-color-dot').forEach((dot) => {
+    dot.addEventListener('click', () => {
+      selColor = dot.dataset.color;
+      overlay.querySelectorAll('.cc-color-dot').forEach((d) => d.classList.toggle('active', d === dot));
+    });
+  });
+
+  // Close buttons
+  overlay.querySelectorAll('.cc-close-modal').forEach((btn) => {
+    btn.addEventListener('click', () => overlay.remove());
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  // Save
+  overlay.querySelector('#cc-save-btn').addEventListener('click', () => {
+    const extraPatterns = modalPatterns.filter((p) => (typeof p === 'string' ? p : p.value));
+    
+    catOverrideState[catId] = {
+      ...(catOverrideState[catId] || {}),
+      color: selColor,
+      extraPatterns
+    };
+
+    overlay.remove();
+    renderUnifiedCategoryList();
+    autoSave();
+    showToast('Category saved', 'success');
   });
 }
 
@@ -1475,52 +1251,73 @@ function collectCustomCategories() {
 //          Group by Subdomain → shows/hides "Always split" pattern panel
 //          Subdomain domain typed patterns (sd-pat-*) + regex validator
 
-let sdDomPatterns = []; // [{ type, value } | string] — in-memory typed patterns
+let sdDomPatterns = []; // string array
+let excDomPatterns = []; // string array
 
 function syncSubdomainChildVisibility() {
-  const groupByDomEl  = document.getElementById('setting-groupByDomain');
   const subdomainEl   = document.getElementById('setting-subdomainGrouping');
-  const subdomainWrap = document.getElementById('subdomain-grouping-wrap');
-  const domainsWrap   = document.getElementById('subdomain-domains-wrap');
+  const exceptionsWrap = document.getElementById('grouping-exceptions-wrap');
 
-  const domainOn    = groupByDomEl?.checked !== false;
-  const subdomainOn = subdomainEl?.checked;
-
-  if (subdomainWrap) subdomainWrap.style.display = domainOn ? '' : 'none';
-  if (domainsWrap)   domainsWrap.style.display   = (domainOn && subdomainOn) ? '' : 'none';
+  if (exceptionsWrap) {
+    exceptionsWrap.style.display = subdomainEl?.checked ? '' : 'none';
+  }
 }
 
-function renderSdPatList() {
-  const list = document.getElementById('sd-pat-list');
-  if (!list) return;
-  if (sdDomPatterns.length === 0) {
-    list.innerHTML = '<div class="pat-empty" style="padding:4px 0">No patterns yet.</div>';
+function renderTagList(containerId, listArray, renderCallback) {
+  const listEl = document.getElementById(containerId);
+  if (!listEl) return;
+  if (listArray.length === 0) {
+    listEl.innerHTML = '';
     return;
   }
-  list.innerHTML = sdDomPatterns.map((p, i) => {
-    const type  = typeof p === 'string' ? 'base-domain' : p.type;
-    const value = typeof p === 'string' ? p : p.value;
-    return `
-      <div class="cc-pat-row">
-        <span class="pat-type-badge">${escHtml(type)}</span>
-        <span class="cc-pat-val">${escHtml(value)}</span>
-        <button class="pat-chip-remove sd-pat-del" data-idx="${i}" title="Remove">×</button>
-      </div>`;
-  }).join('');
+  listEl.innerHTML = listArray.map((val, i) => `
+    <span class="tag-chip">
+      ${escHtml(val)}
+      <button class="tag-chip-remove" data-idx="${i}" title="Remove">×</button>
+    </span>
+  `).join('');
 
-  list.querySelectorAll('.sd-pat-del').forEach((btn) => {
+  listEl.querySelectorAll('.tag-chip-remove').forEach((btn) => {
     btn.addEventListener('click', () => {
-      sdDomPatterns.splice(parseInt(btn.dataset.idx), 1);
-      renderSdPatList();
+      listArray.splice(parseInt(btn.dataset.idx), 1);
+      renderCallback();
       markDirty();
     });
+  });
+}
+
+function renderSdTagList() {
+  // Normalize legacy { type, value } format to strings
+  sdDomPatterns = sdDomPatterns.map(p => typeof p === 'string' ? p : (p.value || '')).filter(Boolean);
+  renderTagList('sd-tag-list', sdDomPatterns, renderSdTagList);
+}
+
+function renderExcTagList() {
+  renderTagList('exc-tag-list', excDomPatterns, renderExcTagList);
+}
+
+function setupTagInput(inputId, listArray, renderCallback) {
+  const inputEl = document.getElementById(inputId);
+  if (!inputEl) return;
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const val = inputEl.value.trim().toLowerCase();
+      if (!val) return;
+      if (!listArray.includes(val)) {
+        listArray.push(val);
+        renderCallback();
+        markDirty();
+      }
+      inputEl.value = '';
+    }
   });
 }
 
 function initGroupingWiring() {
   // ── Group by Domain parent toggle → show/hide subdomain row ──────────────
   document.getElementById('setting-groupByDomain')?.addEventListener('change', () => {
-    syncSubdomainChildVisibility();
+    // Parent group by domain is handled natively by CSS grouping.
     markDirty();
   });
 
@@ -1530,74 +1327,338 @@ function initGroupingWiring() {
     markDirty();
   });
 
-  // ── Subdomain domain typed patterns ──────────────────────────────────────
-  const sdTypeEl  = document.getElementById('sd-pat-type');
-  const sdInputEl = document.getElementById('sd-pat-input');
-  const sdAddBtn  = document.getElementById('sd-pat-add-btn');
+  setupTagInput('sd-tag-input', sdDomPatterns, renderSdTagList);
+  setupTagInput('exc-tag-input', excDomPatterns, renderExcTagList);
+}
 
-  // Show/hide regex validator when type changes
-  function syncRegexValidator() {
-    const validator = document.getElementById('sd-regex-validator');
-    if (validator) validator.style.display = sdTypeEl?.value === 'regex' ? '' : 'none';
-    updateRegexResult();
-  }
+// ─── Dashboard ────────────────────────────────────────────────
+async function initDashboard() {
+  const stats = await getStats();
+  document.getElementById('dash-val-grouped').textContent = (stats.tabsAutoGrouped || 0).toLocaleString();
+  document.getElementById('dash-val-cleaned').textContent = (stats.tabsCleanedUp || 0).toLocaleString();
 
-  function updateRegexResult() {
-    const resultEl  = document.getElementById('sd-regex-result');
-    const testInput = document.getElementById('sd-regex-test-url');
-    if (!resultEl || !testInput || sdTypeEl?.value !== 'regex') return;
+  const tabs = await chrome.tabs.query({});
 
-    const pattern = sdInputEl?.value?.trim();
-    const testUrl = testInput.value.trim();
+  // Category breakdown
+  const overrides = currentSettings.categoryOverrides || {};
+  const catTabsMap = {}; // { catId: [tab, ...] }
+  const uncategorizedTabs = [];
 
-    if (!pattern) { resultEl.textContent = '—'; resultEl.className = 'regex-val-result'; return; }
-
-    let valid = true;
-    let matches = false;
-    try {
-      matches = new RegExp(pattern, 'i').test(testUrl || '');
-    } catch {
-      valid = false;
+  for (const tab of tabs) {
+    if (tab.pinned) {
+      if (!catTabsMap['pinned']) catTabsMap['pinned'] = [];
+      catTabsMap['pinned'].push(tab);
+      continue;
     }
 
-    if (!valid) {
-      resultEl.textContent = '⚠ Invalid regex';
-      resultEl.className = 'regex-val-result invalid';
-    } else if (!testUrl) {
-      resultEl.textContent = '← paste a hostname to test';
-      resultEl.className = 'regex-val-result neutral';
+    let matched = false;
+
+    const builtInMap = Object.fromEntries(BUILTIN_CATEGORIES.map(c => [c.id, c]));
+    const customMap = Object.fromEntries((currentSettings.customCategories || []).map(c => [c.id, c]));
+    const order = currentSettings.categoryOrder || [];
+
+    const evaluateOrder = [...order];
+    const allCatIds = new Set([...Object.keys(builtInMap), ...Object.keys(customMap)]);
+    for (const id of allCatIds) {
+      if (!evaluateOrder.includes(id)) evaluateOrder.push(id);
+    }
+
+    for (const catId of evaluateOrder) {
+      const isCustom = customMap.hasOwnProperty(catId);
+      const isBuiltIn = builtInMap.hasOwnProperty(catId);
+      if (!isCustom && !isBuiltIn) continue;
+
+      let effectiveCat;
+      if (isCustom) {
+        const cat = customMap[catId];
+        if (cat.enabled === false) continue;
+        if (!cat.patterns?.length) continue;
+        effectiveCat = cat;
+      } else {
+        const cat = builtInMap[catId];
+        const ov = overrides[cat.id] || {};
+        if (ov.enabled === false) continue;
+        effectiveCat = { ...cat, patterns: [...cat.patterns, ...(ov.extraPatterns || [])] };
+      }
+
+      if (tabMatchesCategory(tab, effectiveCat)) {
+        if (!catTabsMap[catId]) catTabsMap[catId] = [];
+        catTabsMap[catId].push(tab);
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched) uncategorizedTabs.push(tab);
+  }
+
+  // Build sorted array
+  const breakdown = [];
+  
+  if (catTabsMap['pinned']) {
+    breakdown.push({ id: 'pinned', name: '📌 Pinned Tabs', color: 'orange', tabs: catTabsMap['pinned'] });
+  }
+
+  const builtInMap = Object.fromEntries(BUILTIN_CATEGORIES.map(c => [c.id, c]));
+  const customMap = Object.fromEntries((currentSettings.customCategories || []).map(c => [c.id, c]));
+  const order = currentSettings.categoryOrder || [];
+  const evaluateOrder = [...order];
+  const allCatIds = new Set([...Object.keys(builtInMap), ...Object.keys(customMap)]);
+  for (const id of allCatIds) {
+    if (!evaluateOrder.includes(id)) evaluateOrder.push(id);
+  }
+
+  for (const catId of evaluateOrder) {
+    if (!catTabsMap[catId]) continue;
+    
+    if (customMap.hasOwnProperty(catId)) {
+      const cat = customMap[catId];
+      const name = cat.name || 'Custom';
+      const emoji = cat.emoji || '📁';
+      breakdown.push({ id: catId, name: `${emoji} ${name}`, color: cat.color || 'blue', tabs: catTabsMap[catId] });
+    } else if (builtInMap.hasOwnProperty(catId)) {
+      const cat = builtInMap[catId];
+      const name = overrides[cat.id]?.name || cat.name;
+      const color = overrides[cat.id]?.color || cat.color;
+      breakdown.push({ id: catId, name: `${cat.emoji} ${name}`, color, tabs: catTabsMap[catId] });
+    }
+  }
+
+  if (uncategorizedTabs.length > 0) {
+    breakdown.push({ id: 'uncategorized', name: '🌐 Other / Uncategorized', color: 'grey', tabs: uncategorizedTabs });
+  }
+
+  // Find max count for bar chart rendering
+  let maxCount = 0;
+  for (const group of breakdown) {
+    if (group.tabs.length > maxCount) maxCount = group.tabs.length;
+  }
+
+  const chartContainer = document.getElementById('dash-cat-breakdown');
+  const listContainer = document.getElementById('dash-cat-list');
+  
+  if (breakdown.length === 0) {
+    chartContainer.innerHTML = `<div class="ti-empty">No open tabs found.</div>`;
+    listContainer.innerHTML = `<div class="ti-empty">No open tabs found.</div>`;
+    return;
+  }
+  
+  // Reuse CAT_COLOR_HEX mapping from categories code
+  const colorHexMap = {
+    grey: '#8b949e', blue: '#4285f4', red: '#ea4335', yellow: '#fbbc04',
+    green: '#34a853', pink: '#ff69b4', purple: '#a142f4', cyan: '#24c1e0', orange: '#ff9900'
+  };
+
+  // Render Bar Chart
+  chartContainer.innerHTML = breakdown.map(b => {
+    const width = Math.max(5, Math.round((b.tabs.length / maxCount) * 100));
+    const hex = colorHexMap[b.color] || colorHexMap.grey;
+    return `
+      <div class="dash-cat-row">
+        <div class="dash-cat-name" title="${escHtml(b.name)}">${escHtml(b.name)}</div>
+        <div class="dash-cat-bar-container">
+          <div class="dash-cat-bar" style="width: ${width}%; background: ${hex}"></div>
+        </div>
+        <div class="dash-cat-count">${b.tabs.length}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Render Accordion List
+  listContainer.innerHTML = breakdown.map(b => {
+    const tabRows = b.tabs.map(t => {
+      const favicon = t.favIconUrl
+        ? `<img class="dash-acc-icon" src="${escHtml(t.favIconUrl)}" />`
+        : `<div class="dash-acc-icon-placeholder">🌐</div>`;
+      return `
+      <div class="dash-acc-tab">
+        <div class="dash-acc-icon-wrap">${favicon}</div>
+        <div class="dash-acc-info">
+          <div class="dash-acc-name" title="${escHtml(t.title)}">${escHtml(t.title || 'Unknown Page')}</div>
+          <div class="dash-acc-url" title="${escHtml(t.url)}">${escHtml(t.url)}</div>
+        </div>
+      </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="dash-acc-group" id="dash-acc-${b.id}">
+        <div class="dash-acc-header">
+          <div class="dash-acc-title">
+            <span>${escHtml(b.name)}</span>
+            <span class="ti-badge group" style="color: ${colorHexMap[b.color] || '#8b949e'}; border-color: ${colorHexMap[b.color] || '#8b949e'}40; background: ${colorHexMap[b.color] || '#8b949e'}15;">${b.tabs.length}</span>
+          </div>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text-muted)" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        <div class="dash-acc-body">
+          ${tabRows}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Handle broken favicons
+  listContainer.querySelectorAll('img.dash-acc-icon').forEach((img) => {
+    img.addEventListener('error', () => { 
+      img.outerHTML = '<div class="dash-acc-icon-placeholder">🌐</div>'; 
+    });
+  });
+
+  // Wire Accordion toggle
+  listContainer.querySelectorAll('.dash-acc-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const group = header.parentElement;
+      group.classList.toggle('open');
+    });
+  });
+}
+
+// ─── Dashboard View Toggle ────────────────────────────────────
+function initDashboardToggle() {
+  document.querySelectorAll('.dash-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.dash-view-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const view = btn.dataset.view;
+      if (view === 'chart') {
+        document.getElementById('dash-cat-breakdown').style.display = 'flex';
+        document.getElementById('dash-cat-list').style.display = 'none';
+      } else {
+        document.getElementById('dash-cat-breakdown').style.display = 'none';
+        document.getElementById('dash-cat-list').style.display = 'flex';
+      }
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initDashboardToggle();
+});
+
+// ─── Reset Settings Modal ──────────────────────────────────────────
+function openResetSettingsModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'cc-overlay';
+
+  overlay.innerHTML = `
+    <div class="cc-modal" style="width:400px">
+      <div class="cc-modal-header">
+        <h2 class="cc-modal-title">Reset Settings</h2>
+      </div>
+      <div class="cc-modal-body">
+        <div class="setting-desc" style="margin-bottom:16px">
+          Select which settings you want to reset to their default values. Your saved sessions will not be deleted.
+        </div>
+        
+        <label style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; cursor:pointer;">
+          <span style="font-size:14px; color:var(--text-primary)">General Settings (UI, Limits)</span>
+          <div class="toggle cat-toggle" style="transform: scale(0.85); transform-origin: right center;">
+            <input type="checkbox" id="reset-general" checked />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+        
+        <label style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; cursor:pointer;">
+          <span style="font-size:14px; color:var(--text-primary)">Category Rules & Order</span>
+          <div class="toggle cat-toggle" style="transform: scale(0.85); transform-origin: right center;">
+            <input type="checkbox" id="reset-categories" checked />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+        
+        <label style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; cursor:pointer;">
+          <span style="font-size:14px; color:var(--text-primary)">Domain Exceptions</span>
+          <div class="toggle cat-toggle" style="transform: scale(0.85); transform-origin: right center;">
+            <input type="checkbox" id="reset-domains" checked />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+      </div>
+      <div class="cc-modal-footer">
+        <button class="btn btn-ghost" id="reset-cancel">Cancel</button>
+        <button class="btn btn-danger-solid" id="reset-confirm">Reset Selected</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.querySelector('#reset-cancel').addEventListener('click', close);
+  
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+
+  const cbGen = overlay.querySelector('#reset-general');
+  const cbCat = overlay.querySelector('#reset-categories');
+  const cbDom = overlay.querySelector('#reset-domains');
+  const confirmBtn = overlay.querySelector('#reset-confirm');
+
+  const updateBtnState = () => {
+    if (!cbGen.checked && !cbCat.checked && !cbDom.checked) {
+      confirmBtn.disabled = true;
+      confirmBtn.style.opacity = '0.5';
+      confirmBtn.style.cursor = 'not-allowed';
     } else {
-      resultEl.textContent = matches ? '✓ Matches' : '✗ No match';
-      resultEl.className   = `regex-val-result ${matches ? 'match' : 'nomatch'}`;
+      confirmBtn.disabled = false;
+      confirmBtn.style.opacity = '1';
+      confirmBtn.style.cursor = 'pointer';
     }
-  }
+  };
 
-  sdTypeEl?.addEventListener('change', syncRegexValidator);
-  sdInputEl?.addEventListener('input', updateRegexResult);
-  document.getElementById('sd-regex-test-url')?.addEventListener('input', updateRegexResult);
+  cbGen.addEventListener('change', updateBtnState);
+  cbCat.addEventListener('change', updateBtnState);
+  cbDom.addEventListener('change', updateBtnState);
 
-  const doAddSdPat = () => {
-    const val  = sdInputEl?.value?.trim();
-    if (!val) { sdInputEl?.focus(); return; }
-    const type = sdTypeEl?.value || 'base-domain';
-    const entry = { type, value: val.toLowerCase() };
-
-    // Dedup
-    if (sdDomPatterns.some((p) => {
-      const pt = typeof p === 'string' ? 'base-domain' : p.type;
-      const pv = typeof p === 'string' ? p : p.value;
-      return pt === type && pv === entry.value;
-    })) {
-      if (sdInputEl) sdInputEl.value = '';
+  confirmBtn.addEventListener('click', async () => {
+    const doGen = cbGen.checked;
+    const doCat = cbCat.checked;
+    const doDom = cbDom.checked;
+    
+    if (!doGen && !doCat && !doDom) {
+      close();
       return;
     }
 
-    sdDomPatterns.push(entry);
-    if (sdInputEl) sdInputEl.value = '';
-    renderSdPatList();
-    markDirty();
-  };
+    const defaults = await getSettings(); // get pure default settings
 
-  sdAddBtn?.addEventListener('click', doAddSdPat);
-  sdInputEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doAddSdPat(); } });
+    if (doGen) {
+      currentSettings.theme = defaults.theme;
+      currentSettings.showTabCount = defaults.showTabCount;
+      currentSettings.confirmBeforeCleanup = defaults.confirmBeforeCleanup;
+      currentSettings.autoGroup = defaults.autoGroup;
+      currentSettings.autoGroupOnStartup = defaults.autoGroupOnStartup;
+      currentSettings.groupByDomain = defaults.groupByDomain;
+      currentSettings.subdomainGrouping = defaults.subdomainGrouping;
+      currentSettings.groupSingleTabs = defaults.groupSingleTabs;
+      currentSettings.sortTabsAndGroups = defaults.sortTabsAndGroups;
+      currentSettings.sortGroupsAlphabetically = defaults.sortGroupsAlphabetically;
+      currentSettings.groupCollapseAfterSwitch = defaults.groupCollapseAfterSwitch;
+      currentSettings.autoSaveSession = defaults.autoSaveSession;
+      currentSettings.notificationsEnabled = defaults.notificationsEnabled;
+      currentSettings.tabLimitWarning = defaults.tabLimitWarning;
+      currentSettings.inactiveDays = defaults.inactiveDays;
+    }
+
+    if (doCat) {
+      currentSettings.categoryOverrides = defaults.categoryOverrides;
+      currentSettings.customCategories = defaults.customCategories;
+      currentSettings.categoryOrder = defaults.categoryOrder;
+    }
+
+    if (doDom) {
+      currentSettings.subdomainDomains = defaults.subdomainDomains;
+      currentSettings.excludedDomains = defaults.excludedDomains;
+    }
+
+    await chrome.storage.local.set({ settings: currentSettings });
+    populateSettings(currentSettings); // Refreshes the UI arrays
+    if (doCat) initUnifiedCategories(); // Re-render category grid from updated state
+    
+    isDirty = false;
+    document.getElementById('save-bar').style.display = 'none';
+    showToast('Settings reset', 'success');
+    close();
+  });
 }

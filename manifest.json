@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TabMaster Pro",
-  "version": "1.0.1",
-  "description": "Smart tab grouping, cleanup, session management and personal settings for power users.",
+  "version": "1.5.0",
+  "description": "Smart tab grouping, memory-saving hibernation, and seamless session management for power users. Take back control of your browser.",
   "author": "TabMaster Pro",
 
   "icons": {
@@ -35,7 +35,8 @@
     "sessions",
     "alarms",
     "notifications",
-    "contextMenus"
+    "contextMenus",
+    "scripting"
   ],
 
   "host_permissions": [

@@ -14,12 +14,16 @@
       <img src="../icons/icon48.png" alt="TabMaster" class="sidebar-logo" />
       <div>
         <div class="sidebar-title">TabMaster <span class="gradient-text">Pro</span></div>
-        <div class="sidebar-version" id="sidebar-version">v1.0.1</div>
+        <div class="sidebar-version" id="sidebar-version">v1.5.0</div>
       </div>
     </div>
 
     <nav class="sidebar-nav">
-      <button class="nav-item active" data-section="general">
+      <button class="nav-item active" data-section="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" data-section="general">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         General
       </button>
@@ -40,13 +44,13 @@
         Notifications
       </button>
 
-      <button class="nav-item" data-section="tabs">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M6 7h4M6 11h8"/><circle cx="17" cy="10" r="2"/></svg>
-        Tab Insights
-      </button>
       <button class="nav-item" data-section="data">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
         Data
+      </button>
+      <button class="nav-item" data-section="about">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        About
       </button>
     </nav>
 
@@ -62,8 +66,137 @@
       <p class="section-desc" id="section-desc">Customize your TabMaster Pro experience</p>
     </div>
 
+    <!-- ── DASHBOARD ───────────────────────────────────────── -->
+    <section class="settings-section active" id="section-dashboard">
+
+
+      <div class="ti-summary-grid" style="margin-bottom: 32px;">
+        <!-- Pinned Tabs (New) -->
+        <div class="ti-stat-card info" id="ti-card-pinned">
+          <div class="ti-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
+          </div>
+          <div class="ti-stat-body">
+            <div class="ti-stat-value" id="ti-pinned">—</div>
+            <div class="ti-stat-label">Pinned Tabs</div>
+          </div>
+        </div>
+
+        <div class="ti-stat-card" id="ti-card-total">
+          <div class="ti-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          </div>
+          <div class="ti-stat-body">
+            <div class="ti-stat-value" id="ti-total">—</div>
+            <div class="ti-stat-label">Total Tabs</div>
+          </div>
+        </div>
+
+        <div class="ti-stat-card success" id="ti-card-grouped">
+          <div class="ti-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div class="ti-stat-body">
+            <div class="ti-stat-value" id="dash-val-grouped">0</div>
+            <div class="ti-stat-label">Auto-Grouped</div>
+          </div>
+        </div>
+
+        <div class="ti-stat-card warning" id="ti-card-cleaned">
+          <div class="ti-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+          </div>
+          <div class="ti-stat-body">
+            <div class="ti-stat-value" id="dash-val-cleaned">0</div>
+            <div class="ti-stat-label">Cleaned Up</div>
+          </div>
+        </div>
+
+        <div class="ti-stat-card danger" id="ti-card-dupes">
+          <div class="ti-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </div>
+          <div class="ti-stat-body">
+            <div class="ti-stat-value" id="ti-dupes">—</div>
+            <div class="ti-stat-label">Duplicates</div>
+          </div>
+        </div>
+
+        <div class="ti-stat-card warning" id="ti-card-bg">
+          <div class="ti-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </div>
+          <div class="ti-stat-body">
+            <div class="ti-stat-value" id="ti-bg">—</div>
+            <div class="ti-stat-label">Background</div>
+          </div>
+        </div>
+
+        <div class="ti-stat-card info" id="ti-card-hibernated">
+          <div class="ti-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </div>
+          <div class="ti-stat-body">
+            <div class="ti-stat-value" id="ti-hibernated">—</div>
+            <div class="ti-stat-label">Hibernated</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="dash-section-header">
+          <div class="group-label" style="margin-bottom:0;">Category Breakdown</div>
+          <div class="dash-view-toggle">
+            <button class="dash-view-btn active" data-view="chart">Chart</button>
+            <button class="dash-view-btn" data-view="list">List</button>
+          </div>
+        </div>
+        <div id="dash-cat-breakdown" class="dash-cat-breakdown">
+          <!-- Populated dynamically -->
+          <div class="ti-empty">Loading breakdown...</div>
+        </div>
+        <div id="dash-cat-list" class="dash-cat-list" style="display: none;">
+        </div>
+      </div>
+
+      <!-- Filter + search + actions bar -->
+      <div class="ti-toolbar">
+        <div class="ti-filters" id="ti-filters">
+          <button class="ti-filter-btn active" data-filter="all">All</button>
+          <button class="ti-filter-btn" data-filter="duplicates">🔁 Duplicates</button>
+          <button class="ti-filter-btn" data-filter="background">👁 Background</button>
+          <button class="ti-filter-btn" data-filter="inactive">🕐 Inactive</button>
+          <button class="ti-filter-btn" data-filter="hibernated">💤 Hibernated</button>
+        </div>
+        <div class="ti-toolbar-right">
+          <div class="ti-search-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="ti-search" id="ti-search" placeholder="Search tabs…" />
+          </div>
+          <button class="btn btn-secondary" id="ti-refresh" title="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bulk action bar (shown when filter is active) -->
+      <div class="ti-bulk-bar" id="ti-bulk-bar">
+        <span id="ti-bulk-label"></span>
+        <div class="ti-bulk-actions" id="ti-bulk-actions"></div>
+      </div>
+
+      <!-- Tab list -->
+      <div id="ti-tab-list" class="ti-tab-list">
+        <div class="ti-loading" id="ti-loading">
+          <div class="ti-spinner"></div>
+          <div>Loading tab insights...</div>
+        </div>
+      </div>
+      
+    </section>
+
     <!-- ── GENERAL ───────────────────────────────────────── -->
-    <section class="settings-section active" id="section-general">
+    <section class="settings-section" id="section-general">
       <div class="settings-group">
         <div class="group-label">Appearance</div>
         <div class="setting-row">
@@ -134,7 +267,7 @@
         <div class="setting-row">
           <div class="setting-info">
             <div class="setting-name">Auto Group</div>
-            <div class="setting-desc">Group tabs by domain automatically as they open</div>
+            <div class="setting-desc">Automatically group new tabs into Categories and Domains as they open</div>
           </div>
           <label class="toggle">
             <input type="checkbox" id="setting-autoGroup" />
@@ -145,10 +278,21 @@
         <div class="setting-row">
           <div class="setting-info">
             <div class="setting-name">Auto Group on Startup</div>
-            <div class="setting-desc">Group all existing tabs when the browser starts</div>
+            <div class="setting-desc">Organize tabs when browser opens</div>
           </div>
           <label class="toggle">
             <input type="checkbox" id="setting-autoGroupOnStartup" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">Sort Tabs & Groups Physically</div>
+            <div class="setting-desc">Enforce strict physical tab ordering (Pinned -> Categories -> Domains -> Ungrouped)</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="setting-sortTabsAndGroups" checked />
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -176,39 +320,31 @@
         </div>
       </div>
 
-      <!-- ② Category Grouping (always on, no master toggle) -->
-      <div class="settings-group">
-        <div class="group-label">Category Grouping</div>
-        <div class="setting-desc" style="margin-bottom:14px">
-          Tabs are automatically grouped by category before domain grouping.
-          Built-in categories run first, then your custom categories.
-        </div>
-
-        <!-- Category cards — rendered by JS from BUILTIN_CATEGORIES -->
-        <div class="cat-section" id="cat-section">
-          <div class="cat-section-desc">
-            Toggle individual categories on/off and pick a group color. Open a card to view or add patterns.
-          </div>
-          <div class="cat-cards-grid" id="category-cards-grid">
-            <!-- Populated by settings.js initCategories() -->
-          </div>
-        </div>
-      </div>
-
-      <!-- ③ Custom Categories -->
+      <!-- ② Categories & Priority -->
       <div class="settings-group">
         <div class="cc-group-header">
           <div>
-            <div class="group-label">Custom Categories</div>
-            <div class="setting-desc">Create your own categories with any name, emoji, color and URL patterns.</div>
+            <div class="group-label">Categories & Priority</div>
+            <div class="setting-desc" style="margin-bottom:14px">
+              Tabs are matched against categories in the order listed below. <b>Drag and drop</b> to reorder priorities. First match wins.
+            </div>
           </div>
-          <button class="btn btn-primary btn-sm" id="btn-add-custom-cat">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            New Category
-          </button>
+          <div style="align-self: flex-start; margin-top: 4px; display: flex; gap: 8px;">
+            <button class="btn btn-secondary btn-sm" id="btn-reset-cat-order">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Reset Order
+            </button>
+            <button class="btn btn-primary btn-sm" id="btn-add-custom-cat">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New Category
+            </button>
+          </div>
         </div>
-        <div id="custom-cat-list">
-          <!-- Populated by settings.js initCustomCategories() -->
+
+        <div class="cat-section" id="cat-section">
+          <div class="cat-cards-grid" id="category-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">
+            <!-- Populated by settings.js initCategories() -->
+          </div>
         </div>
       </div>
 
@@ -231,7 +367,25 @@
           </label>
         </div>
 
-        <!-- Child: Group by Subdomain (indented, visible only when Group by Domain is ON) -->
+        <!-- Child: Group Single Tabs -->
+        <div class="setting-indent setting-child" id="group-single-tabs-wrap" style="margin-bottom: 8px;">
+          <div class="setting-row" style="padding:0;border:none">
+            <div class="setting-info">
+              <div class="setting-name">Group Single Tabs
+                <span class="setting-child-badge">sub-option</span>
+              </div>
+              <div class="setting-desc">
+                Automatically create a group even if there is only 1 tab for a domain.
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="setting-groupSingleTabs" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Child: Group by Subdomain -->
         <div class="setting-indent setting-child" id="subdomain-grouping-wrap">
           <div class="setting-row" style="padding:0;border:none">
             <div class="setting-info">
@@ -239,8 +393,7 @@
                 <span class="setting-child-badge">sub-option</span>
               </div>
               <div class="setting-desc">
-                <strong>Off:</strong> all subdomains share one group (mail.google.com + drive.google.com → <strong>Google</strong>)<br/>
-                <strong>On:</strong> each subdomain gets its own group (→ <strong>Mail · Google</strong>, <strong>Drive · Google</strong>)
+                Split domains into subdomains (e.g. mail.google.com vs drive.google.com).
               </div>
             </div>
             <label class="toggle">
@@ -249,58 +402,35 @@
             </label>
           </div>
 
-          <!-- Per-domain override — only shown when subdomain toggle is ON -->
-          <div class="setting-indent" id="subdomain-domains-wrap" style="margin-top:12px;display:none">
-            <div class="setting-name" style="margin-bottom:4px">Always split these domains by subdomain</div>
-            <div class="setting-desc" style="margin-bottom:10px">
-              Add specific domains that always use subdomain mode. Supports URL-contains, exact host, regex, etc.
-            </div>
-
-            <!-- Pattern list rendered by JS -->
-            <div class="cc-pat-list" id="sd-pat-list"></div>
-
-            <!-- Add row -->
-            <div class="pat-add-row" style="margin-top:8px">
-              <select class="pat-type-sel input" id="sd-pat-type">
-                <option value="base-domain">Base domain</option>
-                <option value="hostname-contains">Host contains</option>
-                <option value="hostname-exact">Host exact</option>
-                <option value="regex">Regex</option>
-              </select>
-              <input class="pat-add-input input" id="sd-pat-input" placeholder="e.g. google.com" type="text" />
-              <button class="btn btn-sm btn-secondary" id="sd-pat-add-btn">+ Add</button>
-            </div>
-
-            <!-- Regex validator (shown only when regex type selected) -->
-            <div class="regex-validator" id="sd-regex-validator" style="display:none">
-              <div class="regex-val-label">Test your regex:</div>
-              <div class="regex-val-row">
-                <input class="input" id="sd-regex-test-url" placeholder="Paste a hostname to test e.g. mail.google.com" />
-                <div class="regex-val-result" id="sd-regex-result">—</div>
+          <!-- Exception Lists — only shown when subdomain toggle is ON -->
+          <div class="setting-indent" id="grouping-exceptions-wrap" style="margin-top:16px;display:none">
+            
+            <div style="margin-bottom: 20px;">
+              <div class="setting-name" style="margin-bottom:4px">Require Subdomain Mapping</div>
+              <div class="setting-desc" style="margin-bottom:6px">
+                If none are configured, all domains will use subdomain based grouping. If populated, ONLY these domains will use it.
+              </div>
+              <div class="tag-input-container" id="sd-tag-container">
+                <div class="tag-list" id="sd-tag-list"></div>
+                <input class="tag-input-field" id="sd-tag-input" placeholder="Add domain and press Enter..." type="text" />
               </div>
             </div>
 
-            <div class="tag-hint" style="margin-top:6px">Each pattern is checked against the tab's hostname. A match forces subdomain grouping.</div>
+            <div>
+              <div class="setting-name" style="margin-bottom:4px">Do Not Group (Excluded Domains)</div>
+              <div class="setting-desc" style="margin-bottom:6px">
+                These domains will completely bypass the auto-grouper.
+              </div>
+              <div class="tag-input-container" id="exc-tag-container">
+                <div class="tag-list" id="exc-tag-list"></div>
+                <input class="tag-input-field" id="exc-tag-input" placeholder="Add domain and press Enter..." type="text" />
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
-
-      <!-- ⑤ Excluded Domains -->
-      <div class="settings-group">
-        <div class="group-label">Excluded Domains</div>
-        <div class="setting-desc" style="margin-bottom:10px">These domains will never be auto-grouped (one per line)</div>
-        <textarea
-          class="textarea"
-          id="setting-excludedDomains"
-          placeholder="example.com&#10;mail.google.com&#10;notion.so"
-          rows="5"
-        ></textarea>
-        <div class="tag-hint">Enter one domain per line. Subdomains are matched exactly.</div>
-      </div>
     </section>
-
-
-
 
     <!-- ── CLEANUP ───────────────────────────────────────── -->
     <section class="settings-section" id="section-cleanup">
@@ -403,222 +533,6 @@
       </div>
     </section>
 
-    <!-- ── RULES ──────────────────────────────────────────────── -->
-    <section class="settings-section" id="section-rules">
-
-      <!-- Top action bar -->
-      <div class="rules-topbar">
-        <p class="setting-desc">Rules are matched in order. Drag to reprioritize. Each rule creates one Chrome tab group.</p>
-        <div class="rules-topbar-actions">
-          <button class="btn btn-secondary" id="btn-export-rules">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Export
-          </button>
-          <label class="btn btn-secondary" for="rules-import-input">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Import
-          </label>
-          <input type="file" id="rules-import-input" accept=".json" style="display:none" />
-          <button class="btn btn-primary" id="btn-add-rule">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add Rule
-          </button>
-        </div>
-      </div>
-
-      <!-- Rule Editor (add/edit form) -->
-      <div class="rule-editor" id="rule-editor" style="display:none">
-        <div class="rule-editor-header">
-          <span id="rule-editor-title">New Rule</span>
-          <button class="icon-btn-sm" id="btn-close-editor" title="Cancel">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-
-        <div class="rule-editor-body">
-          <!-- Row 1: Name + Color -->
-          <div class="rule-row">
-            <div class="rule-field" style="flex:2">
-              <label class="field-label">Group Name</label>
-              <input class="input" id="re-name" placeholder="e.g. Banking, Work, Social…" maxlength="32" />
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Color</label>
-              <div class="re-color-picker" id="re-color-picker">
-                <button class="re-color-dot active" data-color="blue"   style="--c:#4285f4" title="Blue"></button>
-                <button class="re-color-dot" data-color="green"  style="--c:#34a853" title="Green"></button>
-                <button class="re-color-dot" data-color="red"    style="--c:#ea4335" title="Red"></button>
-                <button class="re-color-dot" data-color="yellow" style="--c:#fbbc04" title="Yellow"></button>
-                <button class="re-color-dot" data-color="pink"   style="--c:#ff6d94" title="Pink"></button>
-                <button class="re-color-dot" data-color="purple" style="--c:#a142f4" title="Purple"></button>
-                <button class="re-color-dot" data-color="cyan"   style="--c:#24c1e0" title="Cyan"></button>
-                <button class="re-color-dot" data-color="orange" style="--c:#ff8c00" title="Orange"></button>
-                <button class="re-color-dot" data-color="grey"   style="--c:#8b949e" title="Grey"></button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Row 2: Match Type -->
-          <div class="rule-field">
-            <label class="field-label">Match Type</label>
-            <div class="match-type-grid" id="re-match-type">
-              <button class="match-type-btn active" data-type="url-contains">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <span>URL Contains</span>
-                <small>Match any part of the full URL</small>
-              </button>
-              <button class="match-type-btn" data-type="hostname-contains">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                <span>Hostname Contains</span>
-                <small>Any part of hostname incl. subdomain</small>
-              </button>
-              <button class="match-type-btn" data-type="hostname-exact">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                <span>Exact Hostname</span>
-                <small>Exact subdomain match only</small>
-              </button>
-              <button class="match-type-btn" data-type="base-domain">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
-                <span>Base Domain</span>
-                <small>Registrable domain, ignores subdomain</small>
-              </button>
-              <button class="match-type-btn" data-type="title-contains">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-                <span>Tab Title Contains</span>
-                <small>Match the visible page title</small>
-              </button>
-              <button class="match-type-btn" data-type="regex">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-                <span>Regex (URL)</span>
-                <small>Advanced: full regex on URL</small>
-              </button>
-            </div>
-          </div>
-
-          <!-- Row 3: Patterns -->
-          <div class="rule-field">
-            <label class="field-label">
-              Patterns
-              <span class="field-hint" id="re-patterns-hint">— one per line, case-insensitive substring match</span>
-            </label>
-            <textarea class="textarea" id="re-patterns" rows="5"
-              placeholder="bank.in&#10;hdfc&#10;sbi&#10;icici&#10;axisbank"></textarea>
-            <div class="pattern-tips" id="re-pattern-tips">
-              <span class="tip">💡 Tip: Each line is an independent pattern — a tab matching ANY line will be grouped.</span>
-            </div>
-          </div>
-
-          <!-- Row 4: Options -->
-          <div class="rule-options-row">
-            <label class="rule-toggle-row">
-              <span>Enable this rule</span>
-              <label class="toggle"><input type="checkbox" id="re-enabled" checked /><span class="toggle-slider"></span></label>
-            </label>
-            <button class="btn btn-secondary" id="btn-test-rule">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Test Against Open Tabs
-            </button>
-          </div>
-          <div class="test-result" id="re-test-result" style="display:none"></div>
-        </div>
-
-        <div class="rule-editor-footer">
-          <button class="btn btn-ghost" id="btn-cancel-rule">Cancel</button>
-          <button class="btn btn-primary" id="btn-save-rule">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            Save Rule
-          </button>
-        </div>
-      </div>
-
-      <!-- Rules List -->
-      <div id="rules-list" class="rules-list">
-        <div class="empty-state" id="rules-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h7"/><circle cx="17" cy="18" r="3"/></svg>
-          <p>No custom rules yet.<br/>Click <strong>Add Rule</strong> to create your first group rule.</p>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- ── TAB INSIGHTS ──────────────────────────────────── -->
-    <section class="settings-section" id="section-tabs">
-
-      <!-- Summary cards -->
-      <div class="ti-summary-grid">
-        <div class="ti-stat-card" id="ti-card-total">
-          <div class="ti-stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          </div>
-          <div class="ti-stat-body">
-            <div class="ti-stat-value" id="ti-total">—</div>
-            <div class="ti-stat-label">Total Tabs</div>
-          </div>
-        </div>
-        <div class="ti-stat-card danger" id="ti-card-dupes">
-          <div class="ti-stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          </div>
-          <div class="ti-stat-body">
-            <div class="ti-stat-value" id="ti-dupes">—</div>
-            <div class="ti-stat-label">Duplicates</div>
-          </div>
-        </div>
-        <div class="ti-stat-card warning" id="ti-card-bg">
-          <div class="ti-stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-          </div>
-          <div class="ti-stat-body">
-            <div class="ti-stat-value" id="ti-bg">—</div>
-            <div class="ti-stat-label">Background</div>
-          </div>
-        </div>
-        <div class="ti-stat-card info" id="ti-card-hibernated">
-          <div class="ti-stat-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          </div>
-          <div class="ti-stat-body">
-            <div class="ti-stat-value" id="ti-hibernated">—</div>
-            <div class="ti-stat-label">Hibernated</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Filter + search + actions bar -->
-      <div class="ti-toolbar">
-        <div class="ti-filters" id="ti-filters">
-          <button class="ti-filter-btn active" data-filter="all">All</button>
-          <button class="ti-filter-btn" data-filter="duplicates">🔁 Duplicates</button>
-          <button class="ti-filter-btn" data-filter="background">👁 Background</button>
-          <button class="ti-filter-btn" data-filter="inactive">🕐 Inactive</button>
-          <button class="ti-filter-btn" data-filter="hibernated">💤 Hibernated</button>
-        </div>
-        <div class="ti-toolbar-right">
-          <div class="ti-search-wrap">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input class="ti-search" id="ti-search" placeholder="Search tabs…" />
-          </div>
-          <button class="btn btn-secondary" id="ti-refresh" title="Refresh">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          </button>
-        </div>
-      </div>
-
-      <!-- Bulk action bar (shown when filter is active) -->
-      <div class="ti-bulk-bar" id="ti-bulk-bar">
-        <span id="ti-bulk-label"></span>
-        <div class="ti-bulk-actions" id="ti-bulk-actions"></div>
-      </div>
-
-      <!-- Tab list -->
-      <div id="ti-tab-list" class="ti-tab-list">
-        <div class="ti-loading" id="ti-loading">
-          <div class="ti-spinner"></div>
-          <span>Scanning tabs…</span>
-        </div>
-      </div>
-
-    </section>
 
     <!-- ── DATA ─────────────────────────────────────────── -->
     <section class="settings-section" id="section-data">
@@ -634,6 +548,13 @@
       <div class="settings-group">
         <div class="group-label">Reset & Clear</div>
         <div class="danger-zone">
+          <div class="danger-item">
+            <div>
+              <div class="danger-title">Reset Dashboard Stats</div>
+              <div class="danger-desc">Reset lifetime counters (tabs grouped, cleaned) to zero</div>
+            </div>
+            <button class="btn btn-danger-outline" id="btn-reset-stats">Reset Stats</button>
+          </div>
           <div class="danger-item">
             <div>
               <div class="danger-title">Clear Tab Activity Log</div>
@@ -658,15 +579,24 @@
         </div>
       </div>
 
+    </section>
+
+    <!-- ── ABOUT ─────────────────────────────────────────── -->
+    <section class="settings-section" id="section-about">
       <div class="settings-group">
-        <div class="group-label">About</div>
-        <div class="about-card">
-          <img src="../icons/icon48.png" alt="TabMaster" class="about-icon" />
-          <div>
-            <div class="about-name">TabMaster Pro</div>
-            <div class="about-version" id="about-version">Version 1.0.1</div>
-            <div class="about-desc">Smart tab management for power users. Group, organize, clean up, and save your browsing sessions.</div>
-          </div>
+        <div class="group-label">About the Developer</div>
+        <div class="about-card" style="align-items: center; text-align: center; flex-direction: column; padding: 48px 24px;">
+          <!-- ForgeDot Tools branding -->
+          <img src="../icons/forgedot-logo.png" alt="ForgeDot Tools" class="brand-logo" style="width: 72px; height: 72px; margin-bottom: 16px;" />
+          <div class="about-name" style="font-size: 32px; line-height: 1; margin-bottom: 0;">ForgeDot <span class="gradient-text">Tools</span></div>
+          <div class="about-desc" style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 0;">Forging digital efficiency.</div>
+          
+          <div style="width: 100%; height: 1px; background: var(--border); margin: 24px 0 32px 0;"></div>
+          
+          <img src="../icons/icon48.png" alt="TabMaster" class="about-icon" style="margin: 0 0 16px 0; width: 64px; height: 64px;" />
+          <div class="about-name" style="font-size: 24px;">TabMaster Pro</div>
+          <div class="about-version" id="about-version" style="margin-bottom: 12px; font-size: 14px;">Version 1.5.0</div>
+          <div class="about-desc" style="max-width: 400px; margin: 0 auto; font-size: 14px; line-height: 1.6;">Smart tab management for power users. Group, organize, clean up, and save your browsing sessions.</div>
         </div>
       </div>
     </section>

@@ -3,7 +3,7 @@
  * Save and restore named tab sessions.
  */
 
-import { saveSession, getSessions, deleteSession, markProgrammaticTabs } from './storage.js';
+import { saveSession, getSessions, deleteSession, markProgrammaticTabs, incrementStat } from './storage.js';
 
 /**
  * Save all current tabs in the window as a named session.
@@ -40,6 +40,7 @@ export async function saveCurrentSession(name, windowId) {
   };
 
   await saveSession(session);
+  await incrementStat('sessionsSaved', 1);
   return session;
 }
 
