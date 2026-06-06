@@ -1,17 +1,20 @@
-import { getDomain } from '../utils/tabManager.js';
+import { getDomain, BUILTIN_CATEGORIES } from '../utils/tabManager.js';
 
 // Note: getDomain is imported from tabManager to reuse the same registrable-domain logic.
 
 export const DEFAULT_SETTINGS = {
-  theme: 'dark',
+  theme: 'system',
   autoGroup: false,
   autoGroupOnStartup: false,
   groupByDomain: true,            // domain-based fallback grouping on/off
   subdomainGrouping: false,       // false = base domain; true = separate per subdomain
-  subdomainDomains: [],           // typed patterns [{ type, value }] — these hosts always use subdomain mode
+  subdomainDomains: [],           // string array of hostnames for subdomain whitelist
   categoryOverrides: {},          // { catId: { enabled: bool, color: string, extraPatterns[] } }
   customCategories: [],           // user-defined categories: [{ id, name, emoji, color, patterns[] }]
+  categoryOrder: [],              // ordered array of category IDs
   inactiveDays: 7,
+  groupSingleTabs: false,
+  sortTabsAndGroups: true,
   tabLimitWarning: 20,
   excludedDomains: [],
   groupColors: {},
@@ -23,10 +26,25 @@ export const DEFAULT_SETTINGS = {
   sortGroupsAlphabetically: false,
 };
 
+let memorySettings = null;
+
+// Keep memory caches in sync across contexts (background, popup, settings)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local') {
+    if (changes.settings) {
+      memorySettings = { ...DEFAULT_SETTINGS, ...(changes.settings.newValue || {}) };
+    }
+    if (changes.tabActivity) {
+      memoryTabActivity = changes.tabActivity.newValue || {};
+    }
+  }
+});
+
 /**
  * Get all settings, merged with defaults.
  */
 export async function getSettings() {
+  if (memorySettings) return memorySettings;
   return new Promise((resolve) => {
     chrome.storage.local.get('settings', (result) => {
       const stored = result.settings || {};
@@ -45,8 +63,20 @@ export async function getSettings() {
         );
       }
 
-      const settings = { ...DEFAULT_SETTINGS, ...stored };
-      resolve(settings);
+      // ── Migration: ensure categoryOrder exists and contains all known categories ──
+      if (!Array.isArray(stored.categoryOrder) || stored.categoryOrder.length === 0) {
+        stored.categoryOrder = BUILTIN_CATEGORIES.map(c => c.id).concat((stored.customCategories || []).map(c => c.id));
+      } else {
+        // Append any new built-in categories or custom categories not in order
+        const orderSet = new Set(stored.categoryOrder);
+        const missing = [];
+        for (const cat of BUILTIN_CATEGORIES) if (!orderSet.has(cat.id)) missing.push(cat.id);
+        for (const cat of (stored.customCategories || [])) if (!orderSet.has(cat.id)) missing.push(cat.id);
+        if (missing.length > 0) stored.categoryOrder.push(...missing);
+      }
+
+      memorySettings = { ...DEFAULT_SETTINGS, ...stored };
+      resolve(memorySettings);
     });
   });
 }
@@ -95,26 +125,33 @@ export async function deleteSession(id) {
   });
 }
 
+let memoryTabActivity = null;
+let activityFlushTimeout = null;
+
 /**
  * Get tab activity timestamps { tabId: lastActiveTimestamp }.
  */
 export async function getTabActivity() {
+  if (memoryTabActivity) return memoryTabActivity;
   return new Promise((resolve) => {
     chrome.storage.local.get('tabActivity', (result) => {
-      resolve(result.tabActivity || {});
+      memoryTabActivity = result.tabActivity || {};
+      resolve(memoryTabActivity);
     });
   });
 }
 
 /**
- * Update tab activity timestamp.
+ * Update tab activity timestamp (debounced to save I/O).
  */
 export async function updateTabActivity(tabId) {
   const activity = await getTabActivity();
   activity[tabId] = Date.now();
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ tabActivity: activity }, resolve);
-  });
+  
+  if (activityFlushTimeout) clearTimeout(activityFlushTimeout);
+  activityFlushTimeout = setTimeout(() => {
+    chrome.storage.local.set({ tabActivity: memoryTabActivity });
+  }, 10000); // Flush every 10 seconds max
 }
 
 /**
@@ -128,6 +165,7 @@ export async function pruneTabActivity() {
   for (const [id, ts] of Object.entries(activity)) {
     if (validIds.has(id)) pruned[id] = ts;
   }
+  memoryTabActivity = pruned;
   return new Promise((resolve) => {
     chrome.storage.local.set({ tabActivity: pruned }, resolve);
   });
@@ -144,95 +182,7 @@ export async function pruneTabActivity() {
 //   matchField: 'url'         // 'url' | 'hostname' — where to apply patterns
 // }
 
-/**
- * Get all custom group rules.
- */
-export async function getCustomRules() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get('customRules', (result) => {
-      resolve(result.customRules || []);
-    });
-  });
-}
 
-/**
- * Save the full custom rules array (replaces all).
- */
-export async function saveCustomRules(rules) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ customRules: rules }, resolve);
-  });
-}
-
-/**
- * Add a new custom rule.
- */
-export async function addCustomRule(rule) {
-  const rules = await getCustomRules();
-  const newRule = { ...rule, id: `rule_${Date.now()}` };
-  rules.push(newRule);
-  await saveCustomRules(rules);
-  return newRule;
-}
-
-/**
- * Update an existing rule by id.
- */
-export async function updateCustomRule(id, changes) {
-  const rules = await getCustomRules();
-  const idx = rules.findIndex((r) => r.id === id);
-  if (idx !== -1) rules[idx] = { ...rules[idx], ...changes };
-  await saveCustomRules(rules);
-}
-
-/**
- * Delete a custom rule by id.
- */
-export async function deleteCustomRule(id) {
-  const rules = await getCustomRules();
-  await saveCustomRules(rules.filter((r) => r.id !== id));
-}
-
-/**
- * Check if a tab matches a given rule, respecting its matchType.
- *
- * Match types:
- *  'url-contains'      — case-insensitive substring of the full URL
- *  'hostname-contains' — case-insensitive substring of the full hostname (incl. subdomains)
- *  'hostname-exact'    — exact full hostname match (e.g. mail.google.com only)
- *  'base-domain'       — matches the registrable domain (e.g. google.com matches mail.google.com)
- *  'title-contains'    — case-insensitive substring of the tab title
- *  'regex'             — full regex tested against the URL
- */
-export function tabMatchesRule(tab, rule) {
-  if (rule.enabled === false) return false; // skip disabled rules
-  if (!rule.patterns || rule.patterns.length === 0) return false;
-
-  const matchType = rule.matchType || 'url-contains';
-  let haystack = '';
-
-  if (matchType === 'url-contains' || matchType === 'regex') {
-    haystack = (tab.url || '').toLowerCase();
-  } else if (matchType === 'hostname-contains' || matchType === 'hostname-exact') {
-    try { haystack = new URL(tab.url).hostname.toLowerCase(); } catch { return false; }
-  } else if (matchType === 'base-domain') {
-    haystack = getDomain(tab.url) || ''; // e.g. 'google.com', 'bank.in'
-  } else if (matchType === 'title-contains') {
-    haystack = (tab.title || '').toLowerCase();
-  }
-
-  return rule.patterns.some((p) => {
-    const pattern = p.trim().toLowerCase();
-    if (!pattern) return false;
-    if (matchType === 'regex') {
-      try { return new RegExp(p.trim(), 'i').test(tab.url || ''); } catch { return false; }
-    }
-    if (matchType === 'hostname-exact') {
-      return haystack === pattern; // must be exact, not just contains
-    }
-    return haystack.includes(pattern);
-  });
-}
 
 /**
  * Mark tab IDs as programmatically grouped/ungrouped.
@@ -314,5 +264,57 @@ export async function forgetManuallyGroupedTab(tabId) {
         resolve();
       }
     });
+  });
+}
+
+// ─── Analytics / Stats ────────────────────────────────────────────────────────
+
+/**
+ * Get heuristic cache.
+ */
+export async function getHeuristicCache() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get('heuristicCache', (result) => {
+      resolve(result.heuristicCache || {});
+    });
+  });
+}
+
+/**
+ * Save to heuristic cache.
+ */
+export async function setHeuristicCache(domain, catId) {
+  const cache = await getHeuristicCache();
+  cache[domain] = catId;
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ heuristicCache: cache }, resolve);
+  });
+}
+
+// ─── Analytics / Stats ────────────────────────────────────────────────────────
+
+/**
+ * Get aggregated extension stats.
+ */
+export async function getStats() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get('extensionStats', (result) => {
+      resolve(result.extensionStats || {
+        tabsAutoGrouped: 0,
+        tabsCleanedUp: 0,
+        sessionsSaved: 0
+      });
+    });
+  });
+}
+
+/**
+ * Increment a specific stat counter.
+ */
+export async function incrementStat(key, amount = 1) {
+  const stats = await getStats();
+  stats[key] = (stats[key] || 0) + amount;
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ extensionStats: stats }, resolve);
   });
 }

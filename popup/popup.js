@@ -1,5 +1,5 @@
 /**
- * TabMaster Pro — Popup Logic
+ * ForgeTabs — Popup Logic
  */
 
 import { getSettings, markProgrammaticTabs } from '../utils/storage.js';
@@ -11,6 +11,7 @@ import {
 import {
   saveCurrentSession, restoreSession, getSessions, deleteSession, exportSession
 } from '../utils/sessionManager.js';
+import { customConfirm } from '../utils/ui.js';
 
 // ─── State ────────────────────────────────────────────────
 let currentWindowId = null;
@@ -22,6 +23,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const win = await chrome.windows.getCurrent();
   currentWindowId = win?.id;
   settings = await getSettings();
+
+  const theme = settings.theme || 'dark';
+  if (theme === 'system') {
+    const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  } else {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
 
   await refreshTabCount();
   await renderGroups();
@@ -199,7 +208,7 @@ function initCleanup() {
   }
 
   document.getElementById('btn-close-dupes').addEventListener('click', async () => {
-    if (settings.confirmBeforeCleanup && !confirm('Close all duplicate tabs?')) return;
+    if (settings.confirmBeforeCleanup && !(await customConfirm('Close all duplicate tabs?', 'Cleanup Tabs', 'Close Tabs', true))) return;
     const count = await closeDuplicateTabs(currentWindowId);
     await refreshTabCount();
     showToast(count > 0 ? `✅ Closed ${count} duplicate${count !== 1 ? 's' : ''}` : 'No duplicates found', count > 0 ? 'success' : '');
@@ -207,7 +216,7 @@ function initCleanup() {
 
   document.getElementById('btn-close-inactive').addEventListener('click', async () => {
     const days = settings.inactiveDays || 7;
-    if (settings.confirmBeforeCleanup && !confirm(`Close tabs inactive for ${days}+ days?`)) return;
+    if (settings.confirmBeforeCleanup && !(await customConfirm(`Close tabs inactive for ${days}+ days?`, 'Cleanup Tabs', 'Close Tabs', true))) return;
     const count = await closeInactiveTabs(currentWindowId);
     await refreshTabCount();
     showToast(count > 0 ? `✅ Closed ${count} inactive tab${count !== 1 ? 's' : ''}` : 'No inactive tabs found', count > 0 ? 'success' : '');
@@ -219,7 +228,7 @@ function initCleanup() {
   });
 
   document.getElementById('btn-close-others').addEventListener('click', async () => {
-    if (!confirm('Close all tabs except the active one?')) return;
+    if (!(await customConfirm('Close all tabs except the active one?', 'Close Other Tabs', 'Close Tabs', true))) return;
     const count = await closeOtherTabs(currentWindowId);
     await refreshTabCount();
     showToast(`✅ Closed ${count} tab${count !== 1 ? 's' : ''}`, 'success');
@@ -318,7 +327,7 @@ async function renderSessions() {
 
   container.querySelectorAll('[data-action="delete"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Delete this session?')) return;
+      if (!(await customConfirm('Delete this session?', 'Delete Session', 'Delete', true))) return;
       await deleteSession(btn.dataset.id);
       await renderSessions();
       showToast('Session deleted', '');
@@ -333,7 +342,7 @@ async function renderSessions() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `tabmaster-session-${btn.dataset.id}.json`;
+        a.download = `forgetabs-session-${btn.dataset.id}.json`;
         a.click();
         URL.revokeObjectURL(url);
         showToast('✅ Session exported', 'success');
@@ -384,7 +393,10 @@ function showToast(message, type = '') {
 
 // ─── Helpers ──────────────────────────────────────────────
 function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"'/]/g, (s) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '/': '&#x2F;'
+  }[s]));
 }
 
 const GROUP_COLOR_MAP = {

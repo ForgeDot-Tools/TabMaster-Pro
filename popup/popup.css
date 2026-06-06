@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   TabMaster Pro — Popup Styles
+   ForgeTabs — Popup Styles
    Dark glassmorphism design with micro-animations
 ═══════════════════════════════════════════════════════════ */
 
@@ -19,9 +19,9 @@
 
   --text-primary: #e6edf3;
   --text-secondary: #8b949e;
-  --text-muted: #484f58;
+  --text-muted: #6e7681; /* Improved contrast */
 
-  --border: rgba(255,255,255,0.08);
+  --border: rgba(255,255,255,0.1); /* Slightly more visible */
   --border-hover: rgba(108,99,255,0.4);
 
   --success: #2ea043;
@@ -46,6 +46,21 @@
   --color-grey: #8b949e;
 }
 
+[data-theme="light"] {
+  --bg-primary: #f6f8fa;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f3f4f6;
+  --bg-glass: rgba(255,255,255,0.85);
+  
+  --text-primary: #1f2328;
+  --text-secondary: #656d76;
+  --text-muted: #7d8590; /* Improved contrast */
+  
+  --border: #d0d7de;
+  --border-hover: rgba(108,99,255,0.4);
+}
+
 /* ── Reset & Base ──────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -63,6 +78,8 @@ body {
   min-height: 520px;
   overflow-x: hidden;
   line-height: 1.5;
+  padding-bottom: 40px;
+  position: relative;
 }
 
 /* ── Header ────────────────────────────────────────────── */
@@ -624,6 +641,10 @@ body {
   color: var(--accent);
 }
 
+[data-theme="light"] .brand-logo {
+  filter: invert(1) hue-rotate(180deg) brightness(1.5);
+}
+
 .session-btn.primary:hover { background: rgba(108,99,255,0.25); }
 
 .session-btn.danger-btn {
@@ -729,6 +750,18 @@ body {
 .empty-state svg { width: 36px; height: 36px; opacity: 0.4; }
 .empty-state p { font-size: 12px; line-height: 1.6; }
 .empty-state strong { color: var(--text-secondary); }
+
+/* ── Footer ────────────────────────────────────────────── */
+.popup-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 12px 0;
+}
 
 /* ── Toast ─────────────────────────────────────────────── */
 .global-toast {

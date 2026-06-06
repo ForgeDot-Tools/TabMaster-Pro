@@ -1,0 +1,14 @@
+/* TabMaster Pro Brand CSS */
+:root {
+  --tmp-accent: #6c63ff;
+  --tmp-text-primary: #121212;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tmp-text-primary: #ffffff;
+  }
+}
+
+[data-theme="light"] { --tmp-text-primary: #121212; }
+[data-theme="dark"]  { --tmp-text-primary: #ffffff; }

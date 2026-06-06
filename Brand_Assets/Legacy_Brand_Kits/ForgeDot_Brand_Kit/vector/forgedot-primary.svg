@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 512" width="100%" height="100%">
+  <defs>
+    <filter id="cyanGlow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--fd-gradient-start, #6c63ff)" />
+      <stop offset="100%" stop-color="var(--fd-gradient-end, #00d4ff)" />
+    </linearGradient>
+    <style>
+      .brand-text { font-family: 'Inter', 'Montserrat', sans-serif; font-weight: 700; font-size: 160px; }
+      .text-fd { fill: var(--fd-text-primary, #ffffff); }
+      .text-tools { fill: url(#textGrad); }
+    </style>
+  </defs>
+  
+  <g transform="translate(100, 0)">
+    <g stroke="var(--fd-text-primary, #ffffff)" stroke-width="28" stroke-linecap="square" stroke-linejoin="miter" fill="none">
+      <path d="M 192,128 L 128,128 L 128,384" />
+      <path d="M 128,256 L 184,256" />
+      <path d="M 320,384 L 320,128 L 352,128 L 384,160 L 384,352 L 352,384 Z" />
+    </g>
+    <circle cx="256" cy="256" r="32" fill="var(--fd-accent, #00E5FF)" filter="url(#cyanGlow2)" />
+  </g>
+  <text x="650" y="315" class="brand-text">
+    <tspan class="text-fd">ForgeDot</tspan><tspan class="text-tools"> Tools</tspan>
+  </text>
+</svg>
