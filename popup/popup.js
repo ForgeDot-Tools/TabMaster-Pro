@@ -1,5 +1,5 @@
 /**
- * TabMaster Pro — Popup Logic
+ * ForgeTabs — Popup Logic
  */
 
 import { getSettings, markProgrammaticTabs } from '../utils/storage.js';
@@ -342,7 +342,7 @@ async function renderSessions() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `tabmaster-session-${btn.dataset.id}.json`;
+        a.download = `forgetabs-session-${btn.dataset.id}.json`;
         a.click();
         URL.revokeObjectURL(url);
         showToast('✅ Session exported', 'success');

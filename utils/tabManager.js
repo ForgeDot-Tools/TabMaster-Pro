@@ -1,5 +1,5 @@
 /**
- * TabMaster Pro — Tab Manager
+ * ForgeTabs — Tab Manager
  * Core logic for grouping, cleanup, and tab operations.
  */
 
@@ -717,7 +717,7 @@ export async function autoGroupByDomain(windowId, forceReGroupAll = false) {
           results.push({ groupId, title: label, color, count: tabIds.length, newlyGroupedCount: tabIds.length, source: 'category' });
         }
       } catch (e) {
-        console.warn('[TabMaster] Could not group category tabs for', label, e);
+        console.warn('[ForgeTabs] Could not group category tabs for', label, e);
       }
     }
   }
@@ -793,7 +793,7 @@ export async function autoGroupByDomain(windowId, forceReGroupAll = false) {
         results.push({ groupId, title: label, color, count: tabIds.length, newlyGroupedCount: tabIds.length, source: 'domain' });
       }
     } catch (e) {
-      console.warn('[TabMaster] Could not group domain tabs for', label, e);
+      console.warn('[ForgeTabs] Could not group domain tabs for', label, e);
     }
   }
 
@@ -814,7 +814,7 @@ export async function autoGroupByDomain(windowId, forceReGroupAll = false) {
       await chrome.tabGroups.update(activeTab.groupId, { collapsed: false });
     }
   } catch (e) {
-    console.warn('[TabMaster] Could not expand active group', e);
+    console.warn('[ForgeTabs] Could not expand active group', e);
   }
 
   return results;
@@ -1098,7 +1098,7 @@ export async function collapseAllExceptActive(windowId) {
     }
   } catch (e) {
     // Non-fatal — grouping already succeeded, collapsing is best-effort
-    console.warn('[TabMaster] collapseAllExceptActive failed:', e);
+    console.warn('[ForgeTabs] collapseAllExceptActive failed:', e);
   }
 }
 

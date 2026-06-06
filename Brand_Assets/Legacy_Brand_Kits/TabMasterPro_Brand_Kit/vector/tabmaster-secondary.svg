@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="100%" height="100%">
+  <defs>
+    <linearGradient id="tmpGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--tmp-accent, #6c63ff)" />
+      <stop offset="100%" stop-color="#00d4ff" />
+    </linearGradient>
+    <style>
+      .text-tmp-stacked { font-family: 'Inter', 'Montserrat', sans-serif; font-weight: 700; font-size: 140px; fill: var(--tmp-text-primary, #ffffff); }
+      .text-pro-stacked { font-family: 'Inter', 'Montserrat', sans-serif; font-weight: 700; font-size: 140px; fill: url(#tmpGrad3); }
+    </style>
+  </defs>
+  
+  <g transform="translate(256, 128)">
+    <rect x="64" y="64" width="384" height="384" rx="48" fill="none" stroke="var(--tmp-text-primary, #ffffff)" stroke-width="24" />
+    <rect x="64" y="64" width="384" height="96" rx="48" fill="var(--tmp-text-primary, #ffffff)" />
+    <circle cx="120" cy="112" r="16" fill="#121212" opacity="0.5" />
+    <circle cx="176" cy="112" r="16" fill="#121212" opacity="0.5" />
+    <circle cx="232" cy="112" r="16" fill="#121212" opacity="0.5" />
+    <rect x="128" y="224" width="256" height="160" rx="16" fill="url(#tmpGrad3)" />
+  </g>
+  <text x="512" y="780" class="text-tmp-stacked" text-anchor="middle">TabMaster</text>
+  <text x="512" y="920" class="text-pro-stacked" text-anchor="middle">Pro</text>
+</svg>

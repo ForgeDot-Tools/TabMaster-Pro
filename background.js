@@ -1,5 +1,5 @@
 /**
- * TabMaster Pro — Background Service Worker
+ * ForgeTabs — Background Service Worker
  * Handles tab events, alarms, context menus, and auto-grouping.
  */
 
@@ -31,7 +31,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.alarms.create('tabmaster-stale-check', { periodInMinutes: 60 });
   chrome.alarms.create('tabmaster-activity-prune', { periodInMinutes: 30 });
 
-  console.log('[TabMaster Pro] Installed & initialized.');
+  console.log('[ForgeTabs] Installed & initialized.');
 });
 
 // ─── Context Menu Handler ────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       if (staleCount > 0) {
         showNotification(
           '🗂️ Stale Tabs Detected',
-          `You have ${staleCount} tab(s) inactive for ${settings.inactiveDays}+ days. Open TabMaster to clean up.`
+          `You have ${staleCount} tab(s) inactive for ${settings.inactiveDays}+ days. Open ForgeTabs to clean up.`
         );
       }
     }

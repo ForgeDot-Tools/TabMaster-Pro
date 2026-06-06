@@ -1,8 +1,8 @@
-# TabMaster Pro
+# ForgeTabs
 
 *Forging digital efficiency.* — **ForgeDot Tools**
 
-**TabMaster Pro** is a smart, powerful Google Chrome extension designed for power users who struggle with tab overload. It brings a sleek, glassmorphic UI, robust session management, and automated tab grouping right to your browser.
+**ForgeTabs** is a smart, powerful Google Chrome extension designed for power users who struggle with tab overload. It brings a sleek, glassmorphic UI, robust session management, and automated tab grouping right to your browser.
 
 ## ✨ Features
 
@@ -11,7 +11,7 @@
 - 💾 **Session Management**: Save your current browser session, restore it later, or even export and import sessions as JSON files.
 - 🎨 **Beautiful Glassmorphic UI**: Experience a sleek, modern, and highly responsive popup and settings dashboard built with seamless animations.
 - ⚙️ **Granular Controls**: A fully featured Settings Dashboard lets you tweak tab limits, group collapse behaviors, subdomain exceptions, and more!
-- 🛡️ **Privacy-First**: TabMaster Pro processes and stores all your data and rules entirely locally. Nothing leaves your browser.
+- 🛡️ **Privacy-First**: ForgeTabs processes and stores all your data and rules entirely locally. Nothing leaves your browser.
 
 ## 🚀 Installation
 

@@ -1,5 +1,5 @@
 /**
- * TabMaster Pro — Session Manager
+ * ForgeTabs — Session Manager
  * Save and restore named tab sessions.
  */
 

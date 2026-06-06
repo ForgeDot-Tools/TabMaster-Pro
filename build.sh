@@ -2,9 +2,9 @@
 
 # Configuration
 VERSION=$(grep -m1 '"version"' manifest.json | awk -F '"' '{print $4}')
-OUTPUT_FILE="../TabMasterPro_v${VERSION}.zip"
+OUTPUT_FILE="../ForgeTabs_v${VERSION}.zip"
 
-echo "Bundling TabMaster Pro v${VERSION}..."
+echo "Bundling ForgeTabs v${VERSION}..."
 
 # Remove old build if it exists
 if [ -f "$OUTPUT_FILE" ]; then

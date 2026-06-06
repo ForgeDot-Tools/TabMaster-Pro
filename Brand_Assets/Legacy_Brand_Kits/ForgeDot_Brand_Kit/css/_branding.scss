@@ -1,0 +1,16 @@
+/* ForgeDot Tools Brand CSS */
+:root {
+  --fd-accent: #00E5FF;
+  --fd-text-primary: #121212;
+  --fd-gradient-start: #6c63ff;
+  --fd-gradient-end: #00d4ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fd-text-primary: #ffffff;
+  }
+}
+
+[data-theme="light"] { --fd-text-primary: #121212; }
+[data-theme="dark"]  { --fd-text-primary: #ffffff; }

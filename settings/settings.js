@@ -1,5 +1,5 @@
 /**
- * TabMaster Pro — Settings Page Logic
+ * ForgeTabs — Settings Page Logic
  */
 
 import { getSettings, saveSettings, getSessions, deleteSession, getStats } from '../utils/storage.js';
@@ -17,13 +17,13 @@ let importFileData = null;
 
 const SECTION_LABELS = {
   dashboard: { heading: 'Dashboard', desc: 'Welcome back! Here is a summary of your workspace.' },
-  general: { heading: 'General Settings', desc: 'Customize your TabMaster Pro experience' },
+  general: { heading: 'General Settings', desc: 'Customize your ForgeTabs experience' },
   grouping: { heading: 'Tab Grouping', desc: 'Configure auto-grouping behavior and exclusions' },
   cleanup: { heading: 'Tab Cleanup', desc: 'Manage stale and duplicate tab removal' },
   sessions: { heading: 'Session Management', desc: 'Save, restore, and import tab sessions' },
-  notifications: { heading: 'Notifications', desc: 'Control when TabMaster sends alerts' },
+  notifications: { heading: 'Notifications', desc: 'Control when ForgeTabs sends alerts' },
   data: { heading: 'Data & Storage', desc: 'Manage your saved data and reset settings' },
-  about: { heading: 'About ForgeDot Tools', desc: 'Information about TabMaster Pro and the developer' },
+  about: { heading: 'About ForgeDot Tools', desc: 'Information about ForgeTabs and the developer' },
 };
 
 // ─── Init ─────────────────────────────────────────────────
